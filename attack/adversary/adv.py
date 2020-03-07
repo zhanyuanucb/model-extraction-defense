@@ -11,15 +11,13 @@ use_cuda = torch.cuda.is_available()
 device = torch.device("cuda:0" if use_cuda else "cpu")
 gpu_count = torch.cuda.device_count()
 
-class JDAAdversary(object):
-    def __init__(self, adversary_model, blackbox, queryset, eps=0.1, batch_size=8, steps=1, momentum=0):
-        self.adversary_model = adversary_model
+class RandomAdversary(object):
+    def __init__(self, blackbox, queryset, batch_size=8):
         self.blackbox = blackbox
         self.queryset = queryset
 
-        self.JDA = MultiStepJDA(self.adversary_model, self.blackbox, eps=eps, batchsize=batch_size, steps=steps, momentum=momentum)
+        self.n_queryset = len(self.queryset)
         self.batch_size = batch_size
-        self.is_seedset = True
         self.idx_set = set()
 
         self.transferset = []  # List of tuples [(img_path, output_probs)]
@@ -34,20 +32,26 @@ class JDAAdversary(object):
         self.idx_set = set(range(len(self.queryset)))
         self.transferset = []
 
-    def get_transferset(self, budget, balanced=True):
+    def get_transferset(self, budget):
         start_B = 0
         end_B = budget
         with tqdm(total=budget) as pbar:
             for t, B in enumerate(range(start_B, end_B, self.batch_size)):
-                idxs = np.random.choice(list(self.idx_set), replace=False,
+                try:
+                    idxs = np.random.choice(list(self.idx_set), replace=False,
                                         size=min(self.batch_size, budget - len(self.transferset)))
+                except ValueError:
+                    print(len(list(self.idx_set)), min(self.batch_size, budget - len(self.transferset)))
+                    exit(1)
+                #idxs = np.random.choice(list(self.idx_set), replace=False,
+                #                        size=min(self.batch_size, budget - len(self.transferset)))
                 self.idx_set = self.idx_set - set(idxs)
 
                 if len(self.idx_set) == 0:
                     print('=> Query set exhausted. Now repeating input examples.')
                     self.idx_set = set(range(len(self.queryset)))
 
-                x_t = torch.stack([self.queryset[i][0] for i in idxs]).to(device)
+                x_t = torch.stack([self.queryset[i][0] for i in idxs]).to(self.blackbox.device)
                 y_t = self.blackbox(x_t).cpu()
 
                 if hasattr(self.queryset, 'samples'):
@@ -66,4 +70,17 @@ class JDAAdversary(object):
                     self.transferset.append((img_t_i, y_t[i].cpu().squeeze()))
 
                 pbar.update(x_t.size(0))
+
         return self.transferset
+
+
+class JDAAdversary(object):
+    def __init__(self, adversary_model, blackbox, queryset, eps=0.1, batch_size=8, steps=1, momentum=0):
+        self.adversary_model = adversary_model
+        self.blackbox = blackbox
+
+        self.JDA = MultiStepJDA(self.adversary_model, self.blackbox, eps=eps, batchsize=batch_size, steps=steps, momentum=momentum)
+        self.batch_size = batch_size
+
+    def augment(self, dataloader, outdir):
+        return self.JDA(dataloader, outdir)

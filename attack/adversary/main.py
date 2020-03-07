@@ -19,6 +19,7 @@ import attack.utils.model as model_utils
 from attack import datasets
 from attack.adversary.adv import*
 import modelzoo.zoo as zoo
+from attack.victim.blackbox import Blackbox
 
 __author__ = "Tribhuvanesh Orekondy"
 __author_email__ = "orekondy@mpi-inf.mpg.de"
@@ -80,7 +81,6 @@ def samples_to_transferset(samples, budget=None, transform=None, target_transfor
     else:
         raise ValueError('type(x_i) ({}) not recognized. Supported types = (str, np.ndarray)'.format(type(sample_x)))
 
-
 def get_optimizer(parameters, optimizer_type, lr=0.01, momentum=0.5, **kwargs):
     assert optimizer_type in ['sgd', 'sgdm', 'adam', 'adagrad']
     if optimizer_type == 'sgd':
@@ -95,43 +95,18 @@ def get_optimizer(parameters, optimizer_type, lr=0.01, momentum=0.5, **kwargs):
         raise ValueError('Unrecognized optimizer type')
     return optimizer
 
-class Blackbox(object):
-    def __init__(self, model):
-        self.model = model
-   
-    def __call__(self, images):
-        with torch.no_grad():
-            logits = self.model(images)
-        topk_vals, indices = torch.topk(logits, 1)
-        y = torch.zeros_like(logits)
-        return y.scatter(1, indices, torch.ones_like(topk_vals))
-
 # ------------ Start
 use_cuda = torch.cuda.is_available()
 device = torch.device("cuda:0" if use_cuda else "cpu")
 if use_cuda:
     print("GPU: {}".format(torch.cuda.get_device_name(0)))
-else:
+else
     print(device)
 gpu_count = torch.cuda.device_count()
 
-# ----------- Set up queryset
-queryset_name = "mnist"
-valid_datasets = datasets.__dict__.keys()
-if queryset_name not in valid_datasets:
-    raise ValueError('Dataset not found. Valid arguments = {}'.format(valid_datasets))
-modelfamily = datasets.dataset_to_modelfamily[queryset_name]
-transform = datasets.modelfamily_to_transforms[modelfamily]['test']
-queryset = datasets.__dict__[queryset_name](train=True, transform=transform)
-
-# ----------- Initialize Blackbox
-blackbox_model = models.resnet50(pretrained=True)
-blackbox_model.eval()
-
-if gpu_count > 1:
-   blackbox_model = nn.DataParallel(blackbox_model)
-blackbox_model = blackbox_model.to(device)
-blackbox = Blackbox(blackbox_model)
+# ----------- Initialize blackbox
+blackbox_dir = params['victim_model_dir']
+blackbox = Blackbox.from_modeldir(blackbox_dir, device)
 
 # ----------- Initialize adversary model
 model_name = "resnet50"
@@ -155,24 +130,6 @@ steps=1
 momentum=0
 adversary = JDAAdversary(model, blackbox, queryset, eps=eps, batch_size=batch_size, steps=steps, momentum=momentum)
 
-print('=> Constructing transfer set...')
-
-# TODO: Balanced sampleing: sample 1 images from each class
-budget = 100
-balanced = True
-if balanced:
-    assert budget % num_classes == 0, "for balanced sampling, budget should be multiple of number of classes." 
-transferset = adversary.get_transferset(budget, balanced=balanced)
-with open(transfer_out_path, 'wb') as wf:
-    pickle.dump(transferset, wf)
-print('=> transfer set ({} samples) written to: {}'.format(len(transferset), transfer_out_path))
-
-## Store arguments
-#params['created_on'] = str(datetime.now())
-#params_out_path = osp.join(out_path, 'params_transfer.json')
-#with open(params_out_path, 'w') as jf:
-#    json.dump(params, jf, indent=True)
-
 # ----------- Set up transferset
 model_dir = '/mydata/model-extraction/model-extraction-defense/models/testing'
 transferset_path = osp.join(model_dir, 'transferset.pickle')
@@ -181,19 +138,8 @@ with open(transferset_path, 'rb') as rf:
 num_classes = transferset_samples[0][1].size(0)
 print('=> found transfer set with {} samples, {} classes'.format(len(transferset_samples), num_classes))
 
-# ----------- Clean up transfer (top-1 predicted label)
-new_transferset_samples = []
-print('=> Using argmax labels (instead of posterior probabilities)')
-for i in range(len(transferset_samples)):
-    x_i, y_i = transferset_samples[i]
-    argmax_k = y_i.argmax()
-    y_i_1hot = torch.zeros_like(y_i)
-    y_i_1hot[argmax_k] = 1.
-    new_transferset_samples.append((x_i, y_i_1hot))
-transferset_samples = new_transferset_samples
-
 # ----------- Set up testset
-dataset_name = "ImageNet1k"
+dataset_name = "MNIST"
 valid_datasets = datasets.__dict__.keys()
 modelfamily = datasets.dataset_to_modelfamily[dataset_name]
 transform = datasets.modelfamily_to_transforms[modelfamily]['test']

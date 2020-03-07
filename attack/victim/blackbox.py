@@ -6,6 +6,8 @@ import argparse
 import os.path as osp
 import os
 import json
+import sys
+sys.path.append('/mydata/model-extraction/model-extraction-defense/')
 
 import numpy as np
 
@@ -17,28 +19,21 @@ import torch.nn.functional as F
 import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
 
-from knockoff.utils.type_checks import TypeCheck
-import knockoff.utils.model as model_utils
-import knockoff.models.zoo as zoo
-from knockoff import datasets
+from attack.utils.type_checks import TypeCheck
+import attack.utils.model as model_utils
+import modelzoo.zoo as zoo
+from attack import datasets
 
 __author__ = "Tribhuvanesh Orekondy"
-__maintainer__ = "Tribhuvanesh Orekondy"
-__email__ = "orekondy@mpi-inf.mpg.de"
+__author_email__ = "orekondy@mpi-inf.mpg.de"
+__adopted_by__ = "Zhanyuan Zhang"
+__maintainer__ = "Zhanyuan Zhang"
+__maintainer_email__ = "zhang_zhanyuan@berkeley.edu"
 __status__ = "Development"
 
-
 class Blackbox(object):
-    def __init__(self, model, device=None, output_type='probs', topk=1, rounding=0):
-        self.device = torch.device('cuda') if device is None else device
-        self.topk = topk
-        self.rounding = rounding
-
-        self.__model = model.to(device)
-        self.output_type = output_type
-        self.__model.eval()
-
-        self.__call_count = 0
+    def __init__(self, model):
+        self.model = model
 
     @classmethod
     def from_modeldir(cls, model_dir, device=None, output_type='probs'):
@@ -72,33 +67,9 @@ class Blackbox(object):
         blackbox = cls(model, device, output_type)
         return blackbox
 
-    def truncate_output(self, y_t_probs):
-        if self.topk is not None:
-            # Zero-out everything except the top-k predictions
-            topk_vals, indices = torch.topk(y_t_probs, self.topk)
-            newy = torch.zeros_like(y_t_probs)
-            if self.rounding == 0:
-                # argmax prediction
-                newy = newy.scatter(1, indices, torch.ones_like(topk_vals))
-            else:
-                newy = newy.scatter(1, indices, topk_vals)
-            y_t_probs = newy
-
-        # Rounding of decimals
-        if self.rounding is not None:
-            y_t_probs = torch.Tensor(np.round(y_t_probs.numpy(), decimals=self.rounding))
-
-        return y_t_probs
-
-    def __call__(self, query_input):
-        TypeCheck.multiple_image_blackbox_input_tensor(query_input)
-
+    def __call__(self, images):
         with torch.no_grad():
-            query_input = query_input.to(self.device)
-            query_output = self.__model(query_input)
-            self.__call_count += query_input.shape[0]
-
-            query_output_probs = F.softmax(query_output, dim=1).cpu()
-
-        query_output_probs = self.truncate_output(query_output_probs)
-        return query_output_probs
+            logits = self.model(images)
+        topk_vals, indices = torch.topk(logits, 1)
+        y = torch.zeros_like(logits)
+        return y.scatter(1, indices, torch.ones_like(topk_vals))
