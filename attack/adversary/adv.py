@@ -35,6 +35,7 @@ class RandomAdversary(object):
     def get_transferset(self, budget):
         start_B = 0
         end_B = budget
+        # TODO: Balanced sampling
         with tqdm(total=budget) as pbar:
             for t, B in enumerate(range(start_B, end_B, self.batch_size)):
                 try:
@@ -75,12 +76,10 @@ class RandomAdversary(object):
 
 
 class JDAAdversary(object):
-    def __init__(self, adversary_model, blackbox, queryset, eps=0.1, batch_size=8, steps=1, momentum=0):
+    def __init__(self, adversary_model, blackbox, eps=0.1, batch_size=8, steps=1, momentum=0):
         self.adversary_model = adversary_model
         self.blackbox = blackbox
-
         self.JDA = MultiStepJDA(self.adversary_model, self.blackbox, eps=eps, batchsize=batch_size, steps=steps, momentum=momentum)
-        self.batch_size = batch_size
 
     def augment(self, dataloader, outdir):
         return self.JDA(dataloader, outdir)

@@ -69,17 +69,17 @@ class TransferSetImages(Dataset):
     def __len__(self):
         return len(self.data)
 
-def samples_to_transferset(samples, budget=None, transform=None, target_transform=None):
-    # Images are either stored as paths, or numpy arrays
-    sample_x = samples[0][0]
-    assert budget <= len(samples), 'Required {} samples > Found {} samples'.format(budget, len(samples))
-
-    if isinstance(sample_x, str):
-        return TransferSetImagePaths(samples[:budget], transform=transform, target_transform=target_transform)
-    elif isinstance(sample_x, np.ndarray):
-        return TransferSetImages(samples[:budget], transform=transform, target_transform=target_transform)
-    else:
-        raise ValueError('type(x_i) ({}) not recognized. Supported types = (str, np.ndarray)'.format(type(sample_x)))
+#def samples_to_transferset(samples, budget=None, transform=None, target_transform=None):
+#    # Images are either stored as paths, or numpy arrays
+#    sample_x = samples[0][0]
+#    assert budget <= len(samples), 'Required {} samples > Found {} samples'.format(budget, len(samples))
+#
+#    if isinstance(sample_x, str):
+#        return TransferSetImagePaths(samples[:budget], transform=transform, target_transform=target_transform)
+#    elif isinstance(sample_x, np.ndarray):
+#        return TransferSetImages(samples[:budget], transform=transform, target_transform=target_transform)
+#    else:
+#        raise ValueError('type(x_i) ({}) not recognized. Supported types = (str, np.ndarray)'.format(type(sample_x)))
 
 def get_optimizer(parameters, optimizer_type, lr=0.01, momentum=0.5, **kwargs):
     assert optimizer_type in ['sgd', 'sgdm', 'adam', 'adagrad']
@@ -109,9 +109,8 @@ blackbox_dir = params['victim_model_dir']
 blackbox = Blackbox.from_modeldir(blackbox_dir, device)
 
 # ----------- Initialize adversary model
-model_name = "resnet50"
-pretrained = False
-num_classes = 1000
+model_name = "pnet"
+modelfamily = "mnist"
 # model = model_utils.get_net(model_name, n_output_classes=num_classes, pretrained=pretrained)
 model = zoo.get_net(model_name, modelfamily, pretrained, num_classes=num_classes)
 
@@ -120,19 +119,17 @@ if gpu_count > 1:
 model = model.to(device)
 
 # ----------- Initialize adversary
-batch_size = 64
 nworkers = 10
-out_path = "/mydata/model-extraction/model-extraction-defense/models/testing"
-transfer_out_path = osp.join(out_path, 'transferset.pickle')
-batch_size=8
+out_root = "/mydata/model-extraction/model-extraction-defense/models/mnist_testing"
+#substitute_out_root = osp.join(out_path, 'substituteset.pickle')
+batch_size=128
 eps = 0.1
-steps=1
+steps=4
 momentum=0
-adversary = JDAAdversary(model, blackbox, queryset, eps=eps, batch_size=batch_size, steps=steps, momentum=momentum)
+adversary = JDAAdversary(model, blackbox, eps=eps, batch_size=batch_size, steps=steps, momentum=momentum)
 
 # ----------- Set up transferset
-model_dir = '/mydata/model-extraction/model-extraction-defense/models/testing'
-transferset_path = osp.join(model_dir, 'transferset.pickle')
+transferset_path = osp.join(out_root, 'seed.pickle')
 with open(transferset_path, 'rb') as rf:
     transferset_samples = pickle.load(rf)
 num_classes = transferset_samples[0][1].size(0)
@@ -151,13 +148,11 @@ if len(testset.classes) != num_classes:
     raise ValueError('# Transfer classes ({}) != # Testset classes ({})'.format(num_classes, len(testset.classes)))
 
 # ----------- Set up seed images
-budget = 100
 np.random.seed(cfg.DEFAULT_SEED)
 torch.manual_seed(cfg.DEFAULT_SEED)
 torch.cuda.manual_seed(cfg.DEFAULT_SEED)
 
-print(f"class name of elements in transferset_samples: {type(transferset_samples[0][0]).__name__}")
-transferset = samples_to_transferset(transferset_samples, budget=budget, transform=transform)
+transferset = TransferSetImagePaths(transferset_samples, transform=transform)
 print()
 print('=> Training at budget = {}'.format(len(transferset)))
 
@@ -180,12 +175,16 @@ for p in range(phi):
     _, train_loader = model_utils.train_model(model, transferset, model_dir, epochs=epochs, testset=testloader, criterion_train=criterion_train,
                                               checkpoint_suffix=checkpoint_suffix, device=device, optimizer=optimizer)
                             
-    substitute_out_dir = f"/mydata/model-extraction/data/substitute_sets/testing/round-{p}"
+    substitute_out_path = osp.join(out_root, f"round-{p}")
     if not osp.exists(substitute_out_dir):
         os.mkdir(substitute_out_dir)
     augset = adversary.JDA(train_loader, substitute_out_dir)
     transferset_samples.extend(augset)
-    transferset = samples_to_transferset(transferset_samples, budget=len(transferset_samples), transform=transform)
+    with open(substitute_out_path, 'wb') as wf:
+        pickle.dump(transferset_samples, wf)
+    print('=> transfer set ({} samples) written to: {}'.format(len(transferset_samples), substitute_out_path))
+
+    transferset = TransferSetImagePaths(transferset_samples, transform=transform)
 
 # Store arguments
 #params['created_on'] = str(datetime.now())

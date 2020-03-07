@@ -31,6 +31,8 @@ __maintainer__ = "Zhanyuan Zhang"
 __maintainer_email__ = "zhang_zhanyuan@berkeley.edu"
 __status__ = "Development"
 
+gpu_count = torch.cuda.device_count()
+
 class Blackbox(object):
     def __init__(self, model):
         self.model = model
@@ -51,6 +53,8 @@ class Blackbox(object):
         # Instantiate the model
         # model = model_utils.get_net(model_arch, n_output_classes=num_classes)
         model = zoo.get_net(model_arch, modelfamily, pretrained=None, num_classes=num_classes)
+        if gpu_count > 1:
+            model = nn.DataParallel(model)
         model = model.to(device)
 
         # Load weights
