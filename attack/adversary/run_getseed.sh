@@ -1,0 +1,1 @@
+python getseed.py /mydata/model-extraction/model-extraction-defense/attack/victim/models/mnist --out_dir /mydata/model-extraction/model-extraction-defense/attack/adversary/models/mnist --seedset_name=MNIST --seedset_dir=/mydata/model-extraction/data/mnist_balanced_subset100 --batch_size=128

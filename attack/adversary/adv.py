@@ -6,6 +6,8 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
+import torchvision.datasets as tvdatasets
+from attack import datasets
 
 use_cuda = torch.cuda.is_available()
 device = torch.device("cuda:0" if use_cuda else "cpu")
@@ -20,7 +22,7 @@ class RandomAdversary(object):
         self.batch_size = batch_size
         self.idx_set = set()
 
-        self.transferset = []  # List of tuples [(img_path, output_probs)]
+        self.seedset = []  # List of tuples [(img_path, output_probs)]
 
         self._restart()
 
@@ -30,29 +32,20 @@ class RandomAdversary(object):
         torch.cuda.manual_seed(cfg.DEFAULT_SEED)
 
         self.idx_set = set(range(len(self.queryset)))
-        self.transferset = []
+        self.seedset = []
 
-    def get_transferset(self, budget):
-        start_B = 0
-        end_B = budget
-        # TODO: Balanced sampling
-        with tqdm(total=budget) as pbar:
-            for t, B in enumerate(range(start_B, end_B, self.batch_size)):
-                try:
-                    idxs = np.random.choice(list(self.idx_set), replace=False,
-                                        size=min(self.batch_size, budget - len(self.transferset)))
-                except ValueError:
-                    print(len(list(self.idx_set)), min(self.batch_size, budget - len(self.transferset)))
-                    exit(1)
-                #idxs = np.random.choice(list(self.idx_set), replace=False,
-                #                        size=min(self.batch_size, budget - len(self.transferset)))
+    def get_seedset(self):
+        with tqdm(total=self.n_queryset) as pbar:
+            for t, B in enumerate(range(0, self.n_queryset, self.batch_size)):
+                idxs = np.random.choice(list(self.idx_set), replace=False,
+                                        size=min(self.batch_size, self.n_queryset - len(self.seedset)))
                 self.idx_set = self.idx_set - set(idxs)
 
                 if len(self.idx_set) == 0:
                     print('=> Query set exhausted. Now repeating input examples.')
                     self.idx_set = set(range(len(self.queryset)))
 
-                x_t = torch.stack([self.queryset[i][0] for i in idxs]).to(self.blackbox.device)
+                x_t = torch.stack([self.queryset[i][0][0][None] for i in idxs]).cuda()
                 y_t = self.blackbox(x_t).cpu()
 
                 if hasattr(self.queryset, 'samples'):
@@ -68,11 +61,11 @@ class RandomAdversary(object):
 
                 for i in range(x_t.size(0)):
                     img_t_i = img_t[i].squeeze() if isinstance(img_t[i], np.ndarray) else img_t[i]
-                    self.transferset.append((img_t_i, y_t[i].cpu().squeeze()))
+                    self.seedset.append((img_t_i, y_t[i].cpu().squeeze()))
 
                 pbar.update(x_t.size(0))
 
-        return self.transferset
+        return self.seedset
 
 
 class JDAAdversary(object):

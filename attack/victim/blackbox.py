@@ -38,7 +38,7 @@ class Blackbox(object):
         self.model = model
 
     @classmethod
-    def from_modeldir(cls, model_dir, device=None, output_type='probs'):
+    def from_modeldir(cls, model_dir, device=None):
         device = torch.device('cuda') if device is None else device
 
         # What was the model architecture used by this model?
@@ -53,8 +53,9 @@ class Blackbox(object):
         # Instantiate the model
         # model = model_utils.get_net(model_arch, n_output_classes=num_classes)
         model = zoo.get_net(model_arch, modelfamily, pretrained=None, num_classes=num_classes)
-        if gpu_count > 1:
-            model = nn.DataParallel(model)
+        # TODO: Multi-GPU 
+        #if gpu_count > 1:
+        #    model = nn.DataParallel(model)
         model = model.to(device)
 
         # Load weights
@@ -68,7 +69,7 @@ class Blackbox(object):
         model.load_state_dict(checkpoint['state_dict'])
         print("=> loaded checkpoint (epoch {}, acc={:.2f})".format(epoch, best_test_acc))
 
-        blackbox = cls(model, device, output_type)
+        blackbox = cls(model)
         return blackbox
 
     def __call__(self, images):
