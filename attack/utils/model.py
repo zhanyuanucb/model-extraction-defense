@@ -123,7 +123,7 @@ def test_step(model, test_loader, criterion, device, epoch=0., silent=False):
 
     with torch.no_grad():
         for batch_idx, (inputs, targets) in enumerate(test_loader):
-            print(f"testing batch {batch_idx}")
+            #print(f"testing batch {batch_idx}")
             inputs, targets = inputs.to(device), targets.to(device)
             outputs = model(inputs)
             loss = criterion(outputs, targets)
@@ -221,7 +221,7 @@ def train_model(model, trainset, out_path, batch_size=64, criterion_train=None, 
         best_train_acc = max(best_train_acc, train_acc)
 
         if test_loader is not None:
-            print("Start testing")
+            #print("Start testing")
             test_loss, test_acc = test_step(model, test_loader, criterion_test, device, epoch=epoch)
             best_test_acc = max(best_test_acc, test_acc)
 

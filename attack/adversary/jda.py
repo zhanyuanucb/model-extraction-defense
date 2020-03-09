@@ -19,8 +19,8 @@ class MultiStepJDA:
         self.momentum = momentum
         self.v = None 
     
-    def reset_v(self, batchsize, input_shape=[3, 224, 224]):
-        self.v = torch.zeros([batchsize]+input_shape, dtype=torch.float32).to(device)
+    def reset_v(self, input_shape):
+        self.v = torch.zeros(input_shape, dtype=torch.float32).to(device)
 
     def get_jacobian(self, images, labels):
         images.requires_grad_(True)
@@ -44,8 +44,7 @@ class MultiStepJDA:
         augset = []
         img_count = 0
         for images, labels in dataloader:
-            batchsize = images.shape[0]
-            self.reset_v(batchsize)
+            self.reset_v(input_shape=images.shape)
 
             for _ in range(self.steps):
                 images = self.augment_step(images, labels)
@@ -58,7 +57,7 @@ class MultiStepJDA:
                     # TODO: Confirm the range of valid pixel value
                     image_i = np.clip(image_i, 0, 1)
                     save_path_i = osp.join(out_dir, f"{img_count}.png")
-                    plt.imsave(save_path_i, image_i)
+                    plt.imsave(save_path_i, image_i, cmap='gray')
                     img_count += 1
                     augset.append((save_path_i, y[i].cpu().squeeze()))
         return augset

@@ -45,6 +45,7 @@ class RandomAdversary(object):
                     print('=> Query set exhausted. Now repeating input examples.')
                     self.idx_set = set(range(len(self.queryset)))
 
+                # Only for MNIST
                 x_t = torch.stack([self.queryset[i][0][0][None] for i in idxs]).cuda()
                 y_t = self.blackbox(x_t).cpu()
 
