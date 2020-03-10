@@ -99,6 +99,17 @@ def get_optimizer(parameters, optimizer_type, lr=0.01, momentum=0.5, **kwargs):
         raise ValueError('Unrecognized optimizer type')
     return optimizer
 
+params = {"model_name":"pnet",
+          "modelfamily":"mnist",
+          "out_root":"/mydata/model-extraction/model-extraction-defense/attack/adversary/models/mnist/papernot",
+          "batch_size":128,
+          "eps":0.1,
+          "steps":1,
+          "momentum":0,
+          "seedset_dir":"/mydata/model-extraction/model-extraction-defense/attack/adversary/models/mnist",
+          "testset_name":"MNIST",
+          "optimizer_name":"adam"}
+
 # ------------ Start
 use_cuda = torch.cuda.is_available()
 device = torch.device("cuda:0" if use_cuda else "cpu")
@@ -113,8 +124,8 @@ blackbox_dir = '/mydata/model-extraction/model-extraction-defense/attack/victim/
 blackbox = Blackbox.from_modeldir(blackbox_dir, device)
 
 # ----------- Initialize adversary model
-model_name = "pnet"
-modelfamily = "mnist"
+model_name = params["model_name"]
+modelfamily = params["modelfamily"]
 num_classes = 10
 # model = model_utils.get_net(model_name, n_output_classes=num_classes, pretrained=pretrained)
 model = zoo.get_net(model_name, modelfamily, num_classes=num_classes)
@@ -125,29 +136,29 @@ model = model.to(device)
 
 # ----------- Initialize adversary
 nworkers = 10
-out_root = "/mydata/model-extraction/model-extraction-defense/attack/adversary/models/mnist"
+out_root = params["out_root"]
 #substitute_out_root = osp.join(out_path, 'substituteset.pickle')
-batch_size=128
-eps = 0.1
-steps=4
-momentum=0
+batch_size = params["batch_size"]
+eps = params["eps"]
+steps= params["steps"]
+momentum= params["momentum"]
 adversary = JDAAdversary(model, blackbox, eps=eps, batch_size=batch_size, steps=steps, momentum=momentum)
 
 # ----------- Set up transferset
-transferset_path = osp.join("/mydata/model-extraction/model-extraction-defense/attack/adversary/models/mnist", 'seed.pickle')
-with open(transferset_path, 'rb') as rf:
+seedset_path = osp.join(params["seedset_dir"], 'seed.pickle')
+with open(seedset_path, 'rb') as rf:
     transferset_samples = pickle.load(rf)
 num_classes = transferset_samples[0][1].size(0)
 print('=> found transfer set with {} samples, {} classes'.format(len(transferset_samples), num_classes))
 
 # ----------- Set up testset
-dataset_name = "MNIST"
+testset_name = params["testset_name"]
 valid_datasets = datasets.__dict__.keys()
-modelfamily = datasets.dataset_to_modelfamily[dataset_name]
+modelfamily = datasets.dataset_to_modelfamily[testset_name]
 transform = datasets.modelfamily_to_transforms[modelfamily]['test']
-if dataset_name not in valid_datasets:
+if testset_name not in valid_datasets:
     raise ValueError('Dataset not found. Valid arguments = {}'.format(valid_datasets))
-dataset = datasets.__dict__[dataset_name]
+dataset = datasets.__dict__[testset_name]
 testset = dataset(train=False, transform=transform)
 if len(testset.classes) != num_classes:
     raise ValueError('# Transfer classes ({}) != # Testset classes ({})'.format(num_classes, len(testset.classes)))
@@ -161,18 +172,18 @@ transferset = MNISTSeedsetImagePaths(transferset_samples, transform=transform)
 print()
 print('=> Training at budget = {}'.format(len(transferset)))
 
-optimizer_name = "adam"
+optimizer_name = params["optimizer_name"]
 optimizer = get_optimizer(model.parameters(), optimizer_name)
 #print(params)
 
-budget = len(transferset)
-checkpoint_suffix = '.budget{}'.format(budget)
 criterion_train = model_utils.soft_cross_entropy
 
 #--------- Extraction
-phi = 4
+phi = 6
+budget = (step+1)**phi*len(transferset)
+checkpoint_suffix = '.budget{}-papernot'.format(budget)
 testloader = testset
-epochs = 20
+epochs = 10
 num_workers = 10
 train_loader = DataLoader(transferset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
 for p in range(1, phi+1):
@@ -193,7 +204,8 @@ for p in range(1, phi+1):
                                               checkpoint_suffix=checkpoint_suffix, device=device, optimizer=optimizer)
                             
 # Store arguments
-#params['created_on'] = str(datetime.now())
-#params_out_path = osp.join(model_dir, 'params_train.json')
-#with open(params_out_path, 'w') as jf:
-#    json.dump(params, jf, indent=True)
+params['budget'] = budget
+params['created_on'] = str(datetime.now())
+params_out_path = osp.join(out_root, 'params_train.json')
+with open(params_out_path, 'w') as jf:
+    json.dump(params, jf, indent=True)
