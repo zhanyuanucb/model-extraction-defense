@@ -6,6 +6,8 @@ from torchvision.transforms import transforms
 import sys
 sys.path.append('/mydata/model-extraction/model-extraction-defense/')
 import attack.config as cfg
+import random
+import PIL
 
 __author__ = "Tribhuvanesh Orekondy"
 __author_email__ = "orekondy@mpi-inf.mpg.de"
@@ -31,3 +33,40 @@ class DefaultTransforms:
         transforms.ToTensor(),
         normalize,
     ])
+
+class RandomTransforms:
+
+    def __init__(self, modelfamily="cifar"):
+        if modelfamily == "cifar":
+            self.normalize = transforms.Normalize(mean=cfg.CIFAR_MEAN,
+                                             std=cfg.CIFAR_STD)
+            self.size = 32
+        elif modelfamily == "imagenet":
+            self.normalize = transforms.Normalize(mean=cfg.IMAGENET_MEAN,
+                                             std=cfg.IMAGENET_STD)
+            self.size = 224
+        else:
+            raise ValueError
+
+        self.candidates = [transforms.RandomRotation(0.018),
+                           transforms.RandomAffine(0, translate=(0.45, 0.45), resample=PIL.Image.BILINEAR),
+                           transforms.RandomAffine(0, scale=(1-0.17, 1+0.17)),
+                           transforms.RandomResizedCrop(self.size, scale=(0.04, 1.0)) # different
+                           transforms.ColorJitter(brightness=0.09),
+                           transforms.ColorJitter(contrast=0.55)
+                           ]
+                
+        self.noise = transforms.RandomChoice([transforms.Lambda(lambda x: x + torch.randn_like(x).to(x.device) * 0.095),
+                                              transforms.Lambda(lambda x: x + 0.128*torch.rand_like(x).to(x.device) - 0.064)]) 
+        self.noise_transform = transforms.Compose([transforms.ToTensor(),
+                                                   self.normalize,
+                                                   self.noise])
+        self.affinecolor_transform = transforms.Compose([transforms.RandomChoice(self.candidates),
+                                                         transforms.ToTensor(),
+                                                         self.normalize])
+        self.random_transform = transforms.RandomChoise([self.noise_transform, self.affinecolor_transform])
+
+
+    def __call__(self, x):
+
+        return self.random_transform(x)
