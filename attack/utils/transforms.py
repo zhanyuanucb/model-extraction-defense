@@ -68,5 +68,4 @@ class RandomTransforms:
 
 
     def __call__(self, x):
-
         return self.random_transform(x)

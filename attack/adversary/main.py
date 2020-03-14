@@ -42,7 +42,7 @@ class TransferSetImagePaths(ImageFolder):
         self.target_transform = target_transform
 
 class MNISTSeedsetImagePaths(ImageFolder):
-    """TransferSet Dataset, for when images are stored as *paths*"""
+    """MNIST Dataset, for when images are stored as *paths*"""
 
     def __init__(self, samples, transform=None, target_transform=None):
         self.loader = default_loader
@@ -54,7 +54,7 @@ class MNISTSeedsetImagePaths(ImageFolder):
 
     def __getitem__(self, index):
         image, target = super().__getitem__(index)
-        image = image[0][None]
+        image = image[0][None] # only use the first channel
         return image, target
 
 

@@ -12,6 +12,7 @@ import sys
 sys.path.append('/mydata/model-extraction/model-extraction-defense/')
 
 import numpy as np
+import random
 
 from tqdm import tqdm
 
@@ -22,9 +23,11 @@ import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
 import torchvision
 import torchvision.datasets as tvdatasets
+from torchvision.datasets.folder import ImageFolder, IMG_EXTENSIONS, default_loader
 
 from attack import datasets
 import attack.utils.transforms as transform_utils
+import transform_utils.RandomTransforms as RandomTransforms
 import attack.utils.model as model_utils
 import attack.utils.utils as knockoff_utils
 from attack.victim.blackbox import Blackbox
@@ -38,14 +41,45 @@ __maintainer__ = "Zhanyuan Zhang"
 __maintainer_email__ = "zhang_zhanyuan@berkeley.edu"
 __status__ = "Development"
 
+
+class PositiveNegativeSet(ImageFolder):
+    """ Dataset for loading positive samples"""
+
+    def __init__(self, samples, normal_transform=None, random_transform=None, target_transform=None):
+        assert normal_transform is not None, "PositiveSet: require vanilla normalization!"
+        assert random_transform is not None, "PositiveSet: require random transformation!"
+        self.loader = deafult_loader
+        self.extensions = IMG_EXTENSIONS
+        self.samples = samples
+        self.n_samples = len(self.samples)
+        #self.targets = [s[1] for s in samples]
+        self.normal_transform = normal_transform
+        self.random_transform = random_transform
+        self.target_transform = target_transform
+
+    def __getitem__(self, index):
+        path, _ = self.samples[index]
+        sample = self.loader(path)
+        original = self.normal_transform(sample)
+        random = self.random_transform(sample)
+        # randomly choose a different image
+        other_idx = random.choice(list(range(index) + list(index+1, self.n_samples)))
+        other_path, _ = self.samples[other_idx]
+        other_sample = self.loader(other_path)
+        other = self.normal_transform(other_sample)
+        #if self.target_transform is not None:
+        #    target = self.target_transform(target)
+        return original, random, other
+
+
 def main():
     parser = argparse.ArgumentParser(description='Construct transfer set')
     parser.add_argument('victim_model_dir', metavar='PATH', type=str,
                         help='Path to victim model. Should contain files "model_best.pth.tar" and "params.json"')
     parser.add_argument('--out_dir', metavar='PATH', type=str,
                         help='Destination directory to store transfer set', required=True)
-    parser.add_argument('--seedset_name', metavar='TYPE', type=str, help='Name of adversary\'s dataset (P_A(X))', required=True)
-    parser.add_argument('--seedset_dir', metavar='TYPE', type=str, help='Directory of adversary\'s dataset (P_A(X))', required=True)
+    parser.add_argument('--dataset_name', metavar='TYPE', type=str, help='Name of adversary\'s dataset (P_A(X))', required=True)
+    parser.add_argument('--dataset_dir', metavar='TYPE', type=str, help='Directory of adversary\'s dataset (P_A(X))', required=True)
     parser.add_argument('--batch_size', metavar='TYPE', type=int, help='Batch size of queries', default=8)
 
     # ----------- Other params
@@ -64,29 +98,16 @@ def main():
     else:
         device = torch.device('cpu')
 
-    # ----------- Set up seedset
-    seedset_name = params['seedset_name']
-    seedset_dir = params['seedset_dir']
+    # ----------- Set up dataset
+    dataset_name = params['dataset_name']
     valid_datasets = datasets.__dict__.keys()
     if seedset_name not in valid_datasets:
         raise ValueError('Dataset not found. Valid arguments = {}'.format(valid_datasets))
-    modelfamily = datasets.dataset_to_modelfamily[seedset_name]
-    transform = datasets.modelfamily_to_transforms[modelfamily]['test']
-    seedset = tvdatasets.ImageFolder(seedset_dir, transform=transform)
+    modelfamily = datasets.dataset_to_modelfamily[dataset_name]
+    transform = transform_utils.RandomTransforms(modelfamily=modelfamily)
+    dataset = datasets.__dict__[dataset_name](train=True, transform=transform)
 
-
-    # ----------- Initialize blackbox
-    blackbox_dir = params['victim_model_dir']
-    blackbox = Blackbox.from_modeldir(blackbox_dir, device)
-
-    # ----------- Initialize adversary
-    batch_size = params['batch_size']
-    nworkers = params['nworkers']
-    seed_out_path = osp.join(out_path, 'seed.pickle')
-    adversary = RandomAdversary(blackbox, seedset, batch_size=batch_size)
-
-    print('=> constructing seedset...')
-    transferset = adversary.get_seedset()
+    print([dataset.samples[i][0] for i in range(10)])
 
     # ----------- Clean up transfer (top-1 predicted label)
     new_transferset = []
