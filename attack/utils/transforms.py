@@ -51,7 +51,7 @@ class RandomTransforms:
         self.candidates = [transforms.RandomRotation(0.018),
                            transforms.RandomAffine(0, translate=(0.45, 0.45), resample=PIL.Image.BILINEAR),
                            transforms.RandomAffine(0, scale=(1-0.17, 1+0.17)),
-                           transforms.RandomResizedCrop(self.size, scale=(0.04, 1.0)) # different
+                           transforms.RandomResizedCrop(self.size, scale=(0.04, 1.0)), # different
                            transforms.ColorJitter(brightness=0.09),
                            transforms.ColorJitter(contrast=0.55)
                            ]
@@ -64,7 +64,7 @@ class RandomTransforms:
         self.affinecolor_transform = transforms.Compose([transforms.RandomChoice(self.candidates),
                                                          transforms.ToTensor(),
                                                          self.normalize])
-        self.random_transform = transforms.RandomChoise([self.noise_transform, self.affinecolor_transform])
+        self.random_transform = transforms.RandomChoice([self.noise_transform, self.affinecolor_transform])
 
 
     def __call__(self, x):

@@ -21,7 +21,7 @@ ZOO_URL = 'http://datasets.d2.mpi-inf.mpg.de/blackboxchallenge'
 # -------------- Dataset Stuff
 IMAGENET_MEAN = [0.485, 0.456, 0.406]
 IMAGENET_STD = [0.229, 0.224, 0.225]
-CIFAR10_MEAN = [0.4914, 0.4822, 0.4465]
-CIFAR10_STD = [0.2023, 0.1994, 0.2010]
+CIFAR_MEAN = [0.4914, 0.4822, 0.4465]
+CIFAR_STD = [0.2023, 0.1994, 0.2010]
 
 DEFAULT_BATCH_SIZE = 64

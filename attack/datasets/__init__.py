@@ -1,7 +1,7 @@
 from torchvision import transforms
 
 #from knockoff.datasets.caltech256 import Caltech256
-#from knockoff.datasets.cifarlike import CIFAR10, CIFAR100, SVHN
+from attack.datasets.cifarlike import CIFAR10, CIFAR100, SVHN
 #from knockoff.datasets.cubs200 import CUBS200
 #from knockoff.datasets.diabetic5 import Diabetic5
 import sys

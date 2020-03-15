@@ -66,6 +66,8 @@ def soft_cross_entropy(pred, soft_targets, weights=None):
     else:
         return torch.mean(torch.sum(- soft_targets * F.log_softmax(pred, dim=1), 1))
 
+def sim_loss(o_feat, t_feat, d_feat, margin=np.sqrt(10)):
+    return torch.mean(torch.norm(o_feat - t_feat, p=2, dim=1)**2 + F.relu(margin**2 - torch.norm(o_feat - d_feat, p=2, dim=1)**2))
 
 def train_step(model, train_loader, criterion, optimizer, epoch, device, scheduler, log_interval=10):
     model.train()

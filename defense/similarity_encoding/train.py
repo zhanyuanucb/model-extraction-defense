@@ -27,11 +27,12 @@ from torchvision.datasets.folder import ImageFolder, IMG_EXTENSIONS, default_loa
 
 from attack import datasets
 import attack.utils.transforms as transform_utils
-import transform_utils.RandomTransforms as RandomTransforms
+from attack.utils.transforms import *
 import attack.utils.model as model_utils
 import attack.utils.utils as attack_utils
-from attack.victim.blackbox import Blackbox
-from attack.adversary.adv import RandomAdversary
+import modelzoo.zoo as zoo
+#from attack.victim.blackbox import Blackbox
+#from attack.adversary.adv import RandomAdversary
 import attack.config as cfg
 
 __author__ = "Tribhuvanesh Orekondy"
@@ -53,14 +54,12 @@ class TransferSetImagePaths(ImageFolder):
         self.target_transform = target_transform
 
 
-class PositiveNegativeSet(ImageFolder):
+class PositiveNegativeSet:
     """ Dataset for loading positive samples"""
 
     def __init__(self, samples, normal_transform=None, random_transform=None, target_transform=None):
         assert normal_transform is not None, "PositiveSet: require vanilla normalization!"
         assert random_transform is not None, "PositiveSet: require random transformation!"
-        self.loader = deafult_loader
-        self.extensions = IMG_EXTENSIONS
         self.samples = samples
         self.n_samples = len(self.samples)
         #self.targets = [s[1] for s in samples]
@@ -69,14 +68,12 @@ class PositiveNegativeSet(ImageFolder):
         self.target_transform = target_transform
 
     def __getitem__(self, index):
-        path, _ = self.samples[index]
-        sample = self.loader(path)
+        sample, _ = self.samples[index]
         original = self.normal_transform(sample)
         random = self.random_transform(sample)
         # randomly choose a different image
         other_idx = random.choice(list(range(index) + list(index+1, self.n_samples)))
-        other_path, _ = self.samples[other_idx]
-        other_sample = self.loader(other_path)
+        other_sample, _ = self.samples[other_idx]
         other = self.normal_transform(other_sample)
         #if self.target_transform is not None:
         #    target = self.target_transform(target)
@@ -106,12 +103,10 @@ else:
 gpu_count = torch.cuda.device_count()
 
 def main():
-    parser = argparse.ArgumentParser(description='Construct transfer set')
-    parser.add_argument('victim_model_dir', metavar='PATH', type=str,
-                        help='Path to victim model. Should contain files "model_best.pth.tar" and "params.json"')
+    parser = argparse.ArgumentParser(description='Train similarity encoder')
     parser.add_argument('--out_dir', metavar='PATH', type=str,
-                        help='Destination directory to store transfer set', required=True)
-    parser.add_argument('--dataset_name', metavar='TYPE', type=str, help='Name of adversary\'s dataset (P_A(X))', default='cifar')
+                        help='Destination directory to store trained model', default="/mydata/model-extraction/model-extraction-defense/defense/similarity_encoding")
+    parser.add_argument('--dataset_name', metavar='TYPE', type=str, help='Name of adversary\'s dataset (P_A(X))', default='CIFAR10')
     #parser.add_argument('--dataset_dir', metavar='TYPE', type=str, help='Directory of adversary\'s dataset (P_A(X))', required=True)
     parser.add_argument('--model_name', metavar='TYPE', type=str, help='Model name', default="simnet")
     parser.add_argument('--num_classes', metavar='TYPE', type=int, help='Number of classes', default=10)
@@ -138,38 +133,50 @@ def main():
     # ----------- Set up dataset
     dataset_name = params['dataset_name']
     valid_datasets = datasets.__dict__.keys()
-    if seedset_name not in valid_datasets:
+    if dataset_name not in valid_datasets:
         raise ValueError('Dataset not found. Valid arguments = {}'.format(valid_datasets))
     modelfamily = datasets.dataset_to_modelfamily[dataset_name]
     transform = datasets.modelfamily_to_transforms[modelfamily]['test']
     random_transform = transform_utils.RandomTransforms(modelfamily=modelfamily)
-    train_samples = datasets.__dict__[dataset_name](train=True, transform=transform)
-    val_samples = datasets.__dict__[dataset_name](train=False, transform=transform)
+    trainset = datasets.__dict__[dataset_name](train=True, transform=transform)
+    valset = datasets.__dict__[dataset_name](train=False, transform=transform)
 
     # Train/validation splitting
-    sim_trainset = PositiveNegativeSet(train_samples, normal_transform=transform, random_transform=random_transform)
-    sim_valset = PositiveNegativeSet(val_samples, normal_transform=transform, random_transform=random_transform)
-    feat_trainset = TransferSetImagePaths(train_samples, transform=transform)
-    feat_valset = TransferSetImagePaths(val_samples, transform=transform)
+    sim_trainset = PositiveNegativeSet(trainset, normal_transform=transform, random_transform=random_transform)
+    sim_valset = PositiveNegativeSet(valset, normal_transform=transform, random_transform=random_transform)
+    #feat_trainset = TransferSetImagePaths(train_samples, transform=transform)
+    #feat_valset = TransferSetImagePaths(val_samples, transform=transform)
     #sim_train_loader = DataLoader(sim_trainset, batch_size=1, shuffle=True, num_worker=10)
 
     model_name = params['model_name']
     num_classes = params['num_classes']
     model = zoo.get_net(model_name, modelfamily, num_classes=num_classes)
 
-    # Feature extraction training
+    if gpu_count > 1:
+       model = nn.DataParallel(model)
+    model = model.to(device)
+
     epochs = params['epochs']
     optimizer_name = params["optimizer_name"]
     optimizer = get_optimizer(model.parameters(), optimizer_name)
-    model_utils.train_model(model, fea_trainset, out_path, epochs=epochs, testset=feat_valset,
+
+
+    # Feature extraction training
+    #model_utils.train_model(model, trainset, out_path, epochs=epochs, testset=valset,
                             checkpoint_suffix=".feat", device=device, optimizer=optimizer)
     
-    # TODO: Implement similarity loss
-    sim_loss = 
-    model_utils.train_model(model, sim_trainset, out_path, epochs=epochs, testset=sim_valset,
-                            criterion_train=sim_loss, criterion_test=sim_loss,
-                            checkpoint_suffix=".sim", device=device, optimizer=optimizer)
+    # Or load a pretrained feature extractor
 
+    # TODO: Implement similarity loss
+    #sim_loss = model_utils.sim_loss
+    #model_utils.train_model(model, sim_trainset, out_path, epochs=epochs, testset=sim_valset,
+    #                        criterion_train=sim_loss, criterion_test=sim_loss,
+    #                        checkpoint_suffix=".sim", device=device, optimizer=optimizer)
+
+    params['created_on'] = str(datetime.now())
+    params_out_path = osp.join(out_root, 'params_train.json')
+    with open(params_out_path, 'w') as jf:
+        json.dump(params, jf, indent=True)
 
 if __name__ == '__main__':
     main()
