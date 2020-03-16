@@ -7,7 +7,7 @@ from torchvision import transforms
 import matplotlib.pyplot as plt
 
 # ----------- Set up trainset/testset
-dataset_name = "MNIST"
+dataset_name = "CIFAR10"
 num_classes = 10
 valid_datasets = datasets.__dict__.keys()
 modelfamily = datasets.dataset_to_modelfamily[dataset_name]
@@ -26,18 +26,18 @@ test_loader = DataLoader(testset, batch_size=batch_size, shuffle=False, num_work
 
 train_count = 1
 for image, target in train_loader:
-    out_dir = osp.join(cfg.DATASET_ROOT, "mnist/MNIST/processed/train", f"{target[0].data}")
+    out_dir = osp.join(cfg.DATASET_ROOT, "cifar10/train", f"{target[0].data}")
     if not osp.exists(out_dir):
         os.mkdir(out_dir)
-    image = image[0].squeeze().cpu().numpy()
-    plt.imsave(osp.join(out_dir, f"{train_count}.png"), image, cmap='gray')
+    image = image[0].numpy().transpose([1, 2, 0])
+    plt.imsave(osp.join(out_dir, f"{train_count}.png"), image)
     train_count += 1
 
 test_count = 1
-for image, target in testset:
-    out_dir = osp.join(cfg.DATASET_ROOT, "mnist/MNIST/processed/test", f"{target}")
+for image, target in test_loader:
+    out_dir = osp.join(cfg.DATASET_ROOT, "cifar10/test", f"{target}")
     if not osp.exists(out_dir):
         os.mkdir(out_dir)
-    image = image[0].squeeze().cpu().numpy()
-    plt.imsave(osp.join(out_dir, f"{test_count}.png"), image, cmap='gray')
+    image = image[0].numpy().transpose([1, 2, 0])
+    plt.imsave(osp.join(out_dir, f"{test_count}.png"), image)
     test_count += 1

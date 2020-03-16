@@ -8,6 +8,7 @@ sys.path.append('/mydata/model-extraction/model-extraction-defense/')
 import attack.config as cfg
 import random
 import PIL
+import torch
 
 __author__ = "Tribhuvanesh Orekondy"
 __author_email__ = "orekondy@mpi-inf.mpg.de"

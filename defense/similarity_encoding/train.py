@@ -54,12 +54,14 @@ class TransferSetImagePaths(ImageFolder):
         self.target_transform = target_transform
 
 
-class PositiveNegativeSet:
+class PositiveNegativeSet(ImageFolder):
     """ Dataset for loading positive samples"""
 
     def __init__(self, samples, normal_transform=None, random_transform=None, target_transform=None):
         assert normal_transform is not None, "PositiveSet: require vanilla normalization!"
         assert random_transform is not None, "PositiveSet: require random transformation!"
+        self.loader = default_loader
+        self.extensions = IMG_EXTENSIONS
         self.samples = samples
         self.n_samples = len(self.samples)
         #self.targets = [s[1] for s in samples]
@@ -68,17 +70,19 @@ class PositiveNegativeSet:
         self.target_transform = target_transform
 
     def __getitem__(self, index):
-        sample, _ = self.samples[index]
+        path = self.samples[index]
+        sample = self.loader(path)
         original = self.normal_transform(sample)
-        random = self.random_transform(sample)
+        rand = self.random_transform(sample)
         # randomly choose a different image
-        other_idx = random.choice(list(range(index) + list(index+1, self.n_samples)))
-        other_sample, _ = self.samples[other_idx]
+        other_idx = random.choice(list(range(index)) + list(range(index+1, self.n_samples)))
+        other_path = self.samples[other_idx]
+        other_sample = self.loader(other_path)
         other = self.normal_transform(other_sample)
         #if self.target_transform is not None:
         #    target = self.target_transform(target)
-        return original, random, other
-
+        return original, rand, other
+    
 
 def get_optimizer(parameters, optimizer_type, lr=0.01, momentum=0.5, **kwargs):
     assert optimizer_type in ['sgd', 'sgdm', 'adam', 'adagrad']
@@ -93,6 +97,22 @@ def get_optimizer(parameters, optimizer_type, lr=0.01, momentum=0.5, **kwargs):
     else:
         raise ValueError('Unrecognized optimizer type')
     return optimizer
+
+def get_pathset(src_set):
+    pathset = []
+    assert hasattr(src_set, 'samples'), "oh no, you don't have samples"
+    with tqdm(total=len(src_set)) as pbar:
+        for sample in src_set.samples:
+            img_t = sample[0]  # Image paths
+            pathset.append(img_t) # 1 is a dummy label
+            pbar.update(1)
+    return pathset
+
+class IdLayer(nn.Module):
+    def __init__(self):
+        super(IdLayer, self).__init__()
+    def forward(self, x):
+        return x
 
 use_cuda = torch.cuda.is_available()
 device = torch.device("cuda:0" if use_cuda else "cpu")
@@ -142,8 +162,7 @@ def main():
     valset = datasets.__dict__[dataset_name](train=False, transform=transform)
 
     # Train/validation splitting
-    sim_trainset = PositiveNegativeSet(trainset, normal_transform=transform, random_transform=random_transform)
-    sim_valset = PositiveNegativeSet(valset, normal_transform=transform, random_transform=random_transform)
+    
     #feat_trainset = TransferSetImagePaths(train_samples, transform=transform)
     #feat_valset = TransferSetImagePaths(val_samples, transform=transform)
     #sim_train_loader = DataLoader(sim_trainset, batch_size=1, shuffle=True, num_worker=10)
@@ -158,20 +177,48 @@ def main():
 
     epochs = params['epochs']
     optimizer_name = params["optimizer_name"]
-    optimizer = get_optimizer(model.parameters(), optimizer_name)
 
 
-    # Feature extraction training
+    # ---------------- Feature extraction training
+    #optimizer = get_optimizer(model.parameters(), optimizer_name)
     #model_utils.train_model(model, trainset, out_path, epochs=epochs, testset=valset,
-                            checkpoint_suffix=".feat", device=device, optimizer=optimizer)
+    #                        checkpoint_suffix=".feat", device=device, optimizer=optimizer)
     
     # Or load a pretrained feature extractor
+    optimizer = get_optimizer(model.parameters(), optimizer_name)
+    ckp = osp.join(out_path, "checkpoint.feat.pth.tar")
+    if osp.isfile(ckp):
+        print("=> loading checkpoint '{}'".format(ckp))
+        checkpoint = torch.load(ckp)
+        start_epoch = checkpoint['epoch']
+        best_test_acc = checkpoint['best_acc']
+        model.load_state_dict(checkpoint['state_dict'])
+        optimizer.load_state_dict(checkpoint['optimizer'])
+        print("=> loaded checkpoint (epoch {})".format(checkpoint['epoch']))
+    else:
+        print("=> no checkpoint found at '{}'".format(ckp))
+    
+    # Build dataset for Positive/Negative samples
+    train_dir = osp.join(cfg.DATASET_ROOT, 'cifar10/train')
+    test_dir = osp.join(cfg.DATASET_ROOT, 'cifar10/test')
+    train_folder = ImageFolder(train_dir)
+    test_folder = ImageFolder(test_dir)
+    train_pathset = get_pathset(train_folder)
+    val_pathset = get_pathset(test_folder)
 
-    # TODO: Implement similarity loss
-    #sim_loss = model_utils.sim_loss
-    #model_utils.train_model(model, sim_trainset, out_path, epochs=epochs, testset=sim_valset,
-    #                        criterion_train=sim_loss, criterion_test=sim_loss,
-    #                        checkpoint_suffix=".sim", device=device, optimizer=optimizer)
+    # ----------------- Similarity training
+    sim_trainset = PositiveNegativeSet(train_pathset, normal_transform=transform, random_transform=random_transform)
+    sim_valset = PositiveNegativeSet(val_pathset, normal_transform=transform, random_transform=random_transform)
+    # Replace the last layer
+    model.last_linear = IdLayer()
+    if gpu_count > 1:
+       model = nn.DataParallel(model)
+    model = model.to(device)
+
+    sim_loss = model_utils.sim_loss
+    model_utils.train_model(model, sim_trainset, out_path, epochs=epochs, testset=sim_valset,
+                            criterion_train=sim_loss, criterion_test=sim_loss,
+                            checkpoint_suffix=".sim", device=device, optimizer=optimizer)
 
     params['created_on'] = str(datetime.now())
     params_out_path = osp.join(out_root, 'params_train.json')
