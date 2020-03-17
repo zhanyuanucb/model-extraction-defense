@@ -192,8 +192,7 @@ def train_model(model, trainset, out_path, batch_size=64, criterion_train=None, 
         scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=lr_step, gamma=lr_gamma)
     start_epoch = 1
     best_train_acc, train_acc = -1., -1.
-    #best_test_acc, test_acc, test_loss = -1., -1., -1.
-    best_test_acc, test_acc, test_loss = -1., -1., -float('inf')
+    best_test_acc, test_acc, test_loss = -1., -1., -1.
 
 
     # Resume if required
@@ -230,8 +229,7 @@ def train_model(model, trainset, out_path, batch_size=64, criterion_train=None, 
             best_test_acc = max(best_test_acc, test_acc)
 
         # Checkpoint
-        #if test_acc >= best_test_acc:
-        if test_loss >= best_test_loss: # Compare the loss
+        if test_acc >= best_test_acc:
             state = {
                 'epoch': epoch,
                 'arch': model.__class__,

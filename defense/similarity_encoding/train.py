@@ -28,6 +28,7 @@ from torchvision.datasets.folder import ImageFolder, IMG_EXTENSIONS, default_loa
 from attack import datasets
 import attack.utils.transforms as transform_utils
 from attack.utils.transforms import *
+import defense.similarity_encoding.encoder as encoder_utils
 import attack.utils.model as model_utils
 import attack.utils.utils as attack_utils
 import modelzoo.zoo as zoo
@@ -67,7 +68,7 @@ class PositiveNegativeSet(ImageFolder):
         #self.targets = [s[1] for s in samples]
         self.normal_transform = normal_transform
         self.random_transform = random_transform
-        self.target_transform = target_transform
+        self.target_transform = target_transform # dummy
 
     def __getitem__(self, index):
         path = self.samples[index]
@@ -130,7 +131,7 @@ def main():
     #parser.add_argument('--dataset_dir', metavar='TYPE', type=str, help='Directory of adversary\'s dataset (P_A(X))', required=True)
     parser.add_argument('--model_name', metavar='TYPE', type=str, help='Model name', default="simnet")
     parser.add_argument('--num_classes', metavar='TYPE', type=int, help='Number of classes', default=10)
-    parser.add_argument('--batch_size', metavar='TYPE', type=int, help='Batch size of queries', default=8)
+    parser.add_argument('--batch_size', metavar='TYPE', type=int, help='Batch size of queries', default=1)
     parser.add_argument('--epochs', metavar='TYPE', type=int, help='Training epochs', default=50)
     parser.add_argument('--optimizer_name', metavar='TYPE', type=str, help='Optimizer name', default="adam")
 
@@ -171,8 +172,8 @@ def main():
     num_classes = params['num_classes']
     model = zoo.get_net(model_name, modelfamily, num_classes=num_classes)
 
-    if gpu_count > 1:
-       model = nn.DataParallel(model)
+    #if gpu_count > 1:
+    #   model = nn.DataParallel(model)
     model = model.to(device)
 
     epochs = params['epochs']
@@ -180,12 +181,12 @@ def main():
 
 
     # ---------------- Feature extraction training
-    #optimizer = get_optimizer(model.parameters(), optimizer_name)
+    optimizer = get_optimizer(model.parameters(), optimizer_name)
     #model_utils.train_model(model, trainset, out_path, epochs=epochs, testset=valset,
     #                        checkpoint_suffix=".feat", device=device, optimizer=optimizer)
     
     # Or load a pretrained feature extractor
-    optimizer = get_optimizer(model.parameters(), optimizer_name)
+    #optimizer = get_optimizer(model.parameters(), optimizer_name)
     ckp = osp.join(out_path, "checkpoint.feat.pth.tar")
     if osp.isfile(ckp):
         print("=> loading checkpoint '{}'".format(ckp))
@@ -210,18 +211,23 @@ def main():
     sim_trainset = PositiveNegativeSet(train_pathset, normal_transform=transform, random_transform=random_transform)
     sim_valset = PositiveNegativeSet(val_pathset, normal_transform=transform, random_transform=random_transform)
     # Replace the last layer
-    model.last_linear = IdLayer()
-    if gpu_count > 1:
-       model = nn.DataParallel(model)
+    model.last_linear = IdLayer().to(device)
+    #if gpu_count > 1:
+    #   model = nn.DataParallel(model)
     model = model.to(device)
 
-    sim_loss = model_utils.sim_loss
-    model_utils.train_model(model, sim_trainset, out_path, epochs=epochs, testset=sim_valset,
-                            criterion_train=sim_loss, criterion_test=sim_loss,
-                            checkpoint_suffix=".sim", device=device, optimizer=optimizer)
+    margin_train = np.sqrt(10)
+    margin_test = margin_train
+    checkpoint_suffix = ".sim-{:.1f}".format(margin_test)
+    out_path = osp.join(out_path, "margin-{:.1f}".format(margin_test))
+    if not osp.exists(out_path):
+        os.mkdir(out_path)
+    encoder_utils.train_model(model, sim_trainset, out_path, epochs=epochs, testset=sim_valset,
+                            criterion_train=margin_train, criterion_test=margin_test,
+                            checkpoint_suffix=checkpoint_suffix, device=device, optimizer=optimizer)
 
     params['created_on'] = str(datetime.now())
-    params_out_path = osp.join(out_root, 'params_train.json')
+    params_out_path = osp.join(out_path, 'params_train.json')
     with open(params_out_path, 'w') as jf:
         json.dump(params, jf, indent=True)
 
