@@ -144,7 +144,7 @@ def main():
     out_path = params['out_dir']
     attack_utils.create_dir(out_path)
 
-    torch.manual_seed(cfg.DEFAULT_SEED)
+    #torch.manual_seed(cfg.DEFAULT_SEED)
     if params['device_id'] >= 0:
         os.environ["CUDA_VISIBLE_DEVICES"] = str(params['device_id'])
         device = torch.device('cuda')
@@ -161,12 +161,6 @@ def main():
     random_transform = transform_utils.RandomTransforms(modelfamily=modelfamily)
     trainset = datasets.__dict__[dataset_name](train=True, transform=transform)
     valset = datasets.__dict__[dataset_name](train=False, transform=transform)
-
-    # Train/validation splitting
-    
-    #feat_trainset = TransferSetImagePaths(train_samples, transform=transform)
-    #feat_valset = TransferSetImagePaths(val_samples, transform=transform)
-    #sim_train_loader = DataLoader(sim_trainset, batch_size=1, shuffle=True, num_worker=10)
 
     model_name = params['model_name']
     num_classes = params['num_classes']

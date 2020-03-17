@@ -74,11 +74,36 @@ def train_step(model, train_loader, margin, optimizer, epoch, device, scheduler,
     total = 0
     train_loss_batch = 0
     epoch_size = len(train_loader.dataset)
+
     t_start = time.time()
 
     for batch_idx, (o, t, d) in enumerate(train_loader):
+        """
+        # ------------------- Start debugging session
         print(o.shape, t.shape, d.shape)
+        mean = torch.tensor(cfg.CIFAR_MEAN).reshape((3, 1, 1))
+        std = torch.tensor(cfg.CIFAR_STD).reshape((3, 1, 1))
+        import matplotlib.pyplot as plt
+        debug_root = osp.join('/mydata/model-extraction/model-extraction-defense/defense/similarity_encoding', 'debug')
+        if not osp.exists(debug_root):
+            os.mkdir(debug_root)
+        for i in range(20):
+            save_path = osp.join(debug_root, str(i))
+            if not osp.exists(save_path):
+                os.mkdir(save_path)
+            o_i, t_i, d_i = o[i], t[i], d[i]
+            o_i = np.clip((o_i).numpy().transpose([1, 2, 0]), 0., 1.)
+            t_i = np.clip((t_i).numpy().transpose([1, 2, 0]), 0., 1.)
+            d_i = np.clip((d_i).numpy().transpose([1, 2, 0]), 0., 1.)
+            ot_i = np.clip(np.abs(o_i - t_i), 0., 1.)
+            plt.imsave(osp.join(save_path, 'o.png'), o_i)
+            plt.imsave(osp.join(save_path, 't.png'), t_i)
+            plt.imsave(osp.join(save_path, 'd.png'), d_i)
+            plt.imsave(osp.join(save_path, 'ot.png'), ot_i)
+
         exit(1)
+        # ------------------ End debugging session
+        """
         o, t, d = o.to(device), t.to(device), d.to(device)
         optimizer.zero_grad()
         o_feat = model(o)
@@ -219,7 +244,8 @@ def train_model(model, trainset, out_path, batch_size=64, margin_train=np.sqrt(1
                 'epoch': epoch,
                 'arch': model.__class__,
                 'state_dict': model.state_dict(),
-                'best_acc': test_acc,
+                'best_pacc': test_pacc,
+                'best_nacc': test_nacc,
                 'optimizer': optimizer.state_dict(),
                 'created_on': str(datetime.now()),
             }

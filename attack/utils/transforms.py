@@ -49,12 +49,12 @@ class RandomTransforms:
         else:
             raise ValueError
 
-        self.candidates = [transforms.RandomRotation(0.018),
-                           transforms.RandomAffine(0, translate=(0.45, 0.45), resample=PIL.Image.BILINEAR),
-                           transforms.RandomAffine(0, scale=(1-0.17, 1+0.17)),
-                           transforms.RandomResizedCrop(self.size, scale=(0.04, 1.0)), # different
-                           transforms.ColorJitter(brightness=0.09),
-                           transforms.ColorJitter(contrast=0.55)
+        self.candidates = [transforms.RandomRotation(0.018), # Rotation r=0.018
+                           transforms.RandomAffine(0, translate=(0.45, 0.45), resample=PIL.Image.BILINEAR), # Translate, r=0.45
+                           transforms.RandomAffine(0, scale=(1-0.17, 1+0.17)), # Pixel-wise Scale, r=0.17
+                           transforms.RandomResizedCrop(self.size, scale=(1-0.04, 1.0), ratio=(1, 1)), # Crop and Resize, r=0.04, also resize from 3/4 to 4/3 (by default)
+                           transforms.ColorJitter(brightness=0.09), # Brightness, r=0.09
+                           transforms.ColorJitter(contrast=0.55) # Contrast, r=0.55
                            ]
                 
         self.noise = transforms.RandomChoice([transforms.Lambda(lambda x: x + torch.randn_like(x).to(x.device) * 0.095),
