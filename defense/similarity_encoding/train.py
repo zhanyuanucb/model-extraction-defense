@@ -210,7 +210,7 @@ def main():
     #   model = nn.DataParallel(model)
     model = model.to(device)
 
-    margin_train = np.sqrt(10)
+    margin_train = np.sqrt(1000)
     margin_test = margin_train
     checkpoint_suffix = ".sim-{:.1f}".format(margin_test)
     out_path = osp.join(out_path, "margin-{:.1f}".format(margin_test))
