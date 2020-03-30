@@ -59,7 +59,7 @@ class PositiveNegativeSet(ImageFolder):
     """ Dataset for loading positive samples"""
 
     def __init__(self, samples, normal_transform=None, random_transform=None, target_transform=None):
-        assert normal_transform is not None, "PositiveSet: require vanilla normalization!"
+        #assert normal_transform is not None, "PositiveSet: require vanilla normalization!"
         assert random_transform is not None, "PositiveSet: require random transformation!"
         self.loader = default_loader
         self.extensions = IMG_EXTENSIONS
@@ -128,16 +128,18 @@ def main():
     parser.add_argument('--out_dir', metavar='PATH', type=str,
                         help='Destination directory to store trained model', default="/mydata/model-extraction/model-extraction-defense/defense/similarity_encoding")
     parser.add_argument('--dataset_name', metavar='TYPE', type=str, help='Name of adversary\'s dataset (P_A(X))', default='CIFAR10')
-    #parser.add_argument('--dataset_dir', metavar='TYPE', type=str, help='Directory of adversary\'s dataset (P_A(X))', required=True)
     parser.add_argument('--model_name', metavar='TYPE', type=str, help='Model name', default="simnet")
     parser.add_argument('--num_classes', metavar='TYPE', type=int, help='Number of classes', default=10)
     parser.add_argument('--batch_size', metavar='TYPE', type=int, help='Batch size of queries', default=1)
-    parser.add_argument('--epochs', metavar='TYPE', type=int, help='Training epochs', default=50)
+    parser.add_argument('--epochs', metavar='TYPE', type=int, help='Training epochs', default=100)
+    parser.add_argument('--callback', metavar='TYPE', type=float, help='Stop training once val acc meets requirement', default=None)
     parser.add_argument('--optimizer_name', metavar='TYPE', type=str, help='Optimizer name', default="adam")
+    parser.add_argument('--ckpt_suffix', metavar='TYPE', type=str, default="")
+    parser.add_argument('--load_pretrained', metavar='TYPE', type=int, default=1)
 
     # ----------- Other params
     parser.add_argument('-d', '--device_id', metavar='D', type=int, help='Device id', default=0)
-    parser.add_argument('-w', '--nworkers', metavar='N', type=int, help='# Worker threads to load data', default=10)
+    parser.add_argument('-w', '--nworkers', metavar='N', type=int, help='# Worker processes to load data', default=10)
     args = parser.parse_args()
     params = vars(args)
 
@@ -172,17 +174,22 @@ def main():
 
     epochs = params['epochs']
     optimizer_name = params["optimizer_name"]
-
+    optimizer = get_optimizer(model.parameters(), optimizer_name)
+    checkpoint_suffix = params["ckpt_suffix"]
+    load_pretrained = params['load_pretrained']
+    callback = params['callback']
+    if load_pretrained:
+        ckp = osp.join(out_path, f"checkpoint.{checkpoint_suffix}.pth.tar")
+        if not osp.isfile(ckp):
+            print("=> no checkpoint found at '{}' but load_pretrained is {}".format(ckp, load_pretrained))
+            exit(1)
 
     # ---------------- Feature extraction training
-    optimizer = get_optimizer(model.parameters(), optimizer_name)
-    #model_utils.train_model(model, trainset, out_path, epochs=epochs, testset=valset,
-    #                        checkpoint_suffix=".feat", device=device, optimizer=optimizer)
-    
-    # Or load a pretrained feature extractor
-    #optimizer = get_optimizer(model.parameters(), optimizer_name)
-    ckp = osp.join(out_path, "checkpoint.feat.pth.tar")
-    if osp.isfile(ckp):
+    if not load_pretrained:
+        model_utils.train_model(model, trainset, out_path, epochs=epochs, testset=valset,
+                                checkpoint_suffix=checkpoint_suffix, callback=callback, device=device, optimizer=optimizer)
+    # ---------------- Or load a pretrained feature extractor
+    else:
         print("=> loading checkpoint '{}'".format(ckp))
         checkpoint = torch.load(ckp)
         start_epoch = checkpoint['epoch']
@@ -190,8 +197,7 @@ def main():
         model.load_state_dict(checkpoint['state_dict'])
         optimizer.load_state_dict(checkpoint['optimizer'])
         print("=> loaded checkpoint (epoch {})".format(checkpoint['epoch']))
-    else:
-        print("=> no checkpoint found at '{}'".format(ckp))
+    # -----------------------------------------------------
     
     # Build dataset for Positive/Negative samples
     train_dir = osp.join(cfg.DATASET_ROOT, 'cifar10/train')
@@ -210,9 +216,9 @@ def main():
     #   model = nn.DataParallel(model)
     model = model.to(device)
 
-    margin_train = np.sqrt(1000)
+    margin_train = np.sqrt(100)
     margin_test = margin_train
-    checkpoint_suffix = ".sim-{:.1f}".format(margin_test)
+    checkpoint_suffix = ".sim-{:.1f}-{}".format(margin_test, callback)
     out_path = osp.join(out_path, "margin-{:.1f}".format(margin_test))
     if not osp.exists(out_path):
         os.mkdir(out_path)
@@ -221,7 +227,7 @@ def main():
                             checkpoint_suffix=checkpoint_suffix, device=device, optimizer=optimizer)
 
     params['created_on'] = str(datetime.now())
-    params_out_path = osp.join(out_path, 'params_train.json')
+    params_out_path = osp.join(out_path, f'params_train{checkpoint_suffix}.json')
     with open(params_out_path, 'w') as jf:
         json.dump(params, jf, indent=True)
 

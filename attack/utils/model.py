@@ -152,6 +152,7 @@ def test_step(model, test_loader, criterion, device, epoch=0., silent=False):
 def train_model(model, trainset, out_path, batch_size=64, criterion_train=None, criterion_test=None, testset=None,
                 device=None, num_workers=10, lr=0.1, momentum=0.5, lr_step=30, lr_gamma=0.1, resume=None,
                 epochs=100, log_interval=100, weighted_loss=False, checkpoint_suffix='', optimizer=None, scheduler=None,
+                callback=None,
                 **kwargs):
     if device is None:
         device = torch.device('cuda')
@@ -215,8 +216,8 @@ def train_model(model, trainset, out_path, batch_size=64, criterion_train=None, 
         with open(log_path, 'w') as wf:
             columns = ['run_id', 'epoch', 'split', 'loss', 'accuracy', 'best_accuracy']
             wf.write('\t'.join(columns) + '\n')
-
-    model_out_path = osp.join(out_path, 'checkpoint{}.pth.tar'.format(checkpoint_suffix))
+    
+    model_out_path = osp.join(out_path, 'checkpoint.{}.pth.tar'.format(checkpoint_suffix))
     for epoch in range(start_epoch, epochs + 1):
         #scheduler.step(epoch) # should call optimizer.step() before scheduler.stop(epoch)
         train_loss, train_acc = train_step(model, train_loader, criterion_train, optimizer, epoch, device,
@@ -246,5 +247,11 @@ def train_model(model, trainset, out_path, batch_size=64, criterion_train=None, 
             af.write('\t'.join([str(c) for c in train_cols]) + '\n')
             test_cols = [run_id, epoch, 'test', test_loss, test_acc, best_test_acc]
             af.write('\t'.join([str(c) for c in test_cols]) + '\n')
+        
+        # Callback
+        if callback and test_acc >= callback:
+            with open(log_path, 'a') as af:
+                af.write(f'Validation accuracy reaches {callback}, so stop training.\n')
+            return model, train_loader
 
     return model, train_loader

@@ -258,4 +258,16 @@ def train_model(model, trainset, out_path, batch_size=64, margin_train=np.sqrt(1
             test_cols = [run_id, epoch, 'test', test_loss, test_pacc, best_test_pacc, test_nacc, best_test_nacc]
             af.write('\t'.join([str(c) for c in test_cols]) + '\n')
 
+    # Save the one got the most trained
+    state = {
+        'epoch': epoch,
+        'arch': model.__class__,
+        'state_dict': model.state_dict(),
+        'best_pacc': test_pacc,
+        'best_nacc': test_nacc,
+        'optimizer': optimizer.state_dict(),
+        'created_on': str(datetime.now()),
+    }
+    torch.save(state, model_out_path)
+
     return model, train_loader
