@@ -39,12 +39,12 @@ class RandomTransforms:
 
     def __init__(self, modelfamily="cifar"):
         if modelfamily == "cifar":
-            self.normalize = transforms.Normalize(mean=cfg.CIFAR_MEAN,
-                                             std=cfg.CIFAR_STD)
+            #self.normalize = transforms.Normalize(mean=cfg.CIFAR_MEAN,
+            #                                 std=cfg.CIFAR_STD)
             self.size = 32
         elif modelfamily == "imagenet":
-            self.normalize = transforms.Normalize(mean=cfg.IMAGENET_MEAN,
-                                             std=cfg.IMAGENET_STD)
+            #self.normalize = transforms.Normalize(mean=cfg.IMAGENET_MEAN,
+            #                                 std=cfg.IMAGENET_STD)
             self.size = 224
         else:
             raise ValueError
@@ -60,11 +60,12 @@ class RandomTransforms:
         self.noise = transforms.RandomChoice([transforms.Lambda(lambda x: x + torch.randn_like(x).to(x.device) * 0.095),
                                               transforms.Lambda(lambda x: x + 0.128*torch.rand_like(x).to(x.device) - 0.064)]) 
         self.noise_transform = transforms.Compose([transforms.ToTensor(),
-                                                   self.normalize,
+                                                   #self.normalize,
                                                    self.noise])
         self.affinecolor_transform = transforms.Compose([transforms.RandomChoice(self.candidates),
                                                          transforms.ToTensor(),
-                                                         self.normalize])
+                                                         #self.normalize]
+                                                        ])
         self.random_transform = transforms.RandomChoice([self.noise_transform, self.affinecolor_transform])
 
 
