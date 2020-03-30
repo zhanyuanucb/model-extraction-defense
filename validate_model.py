@@ -1,3 +1,4 @@
+import argparse
 import torchvision.models as models
 import json
 import os
@@ -18,61 +19,63 @@ from torch import optim
 from torchvision.datasets.folder import ImageFolder, IMG_EXTENSIONS, default_loader
 from torch.utils.data import Dataset, DataLoader
 
+import modelzoo.zoo as zoo
 import attack.config as cfg
 import attack.utils.model as model_utils
 from attack import datasets
-#from attack.adversary.adv import*
-import pretrained
-def get_optimizer(parameters, optimizer_type, lr=0.01, momentum=0.5, **kwargs):
-    assert optimizer_type in ['sgd', 'sgdm', 'adam', 'adagrad']
-    if optimizer_type == 'sgd':
-        optimizer = optim.SGD(parameters, lr)
-    elif optimizer_type == 'sgdm':
-        optimizer = optim.SGD(parameters, lr, momentum=momentum)
-    elif optimizer_type == 'adagrad':
-        optimizer = optim.Adagrad(parameters)
-    elif optimizer_type == 'adam':
-        optimizer = optim.Adam(parameters)
-    else:
-        raise ValueError('Unrecognized optimizer type')
-    return optimizer
 
 use_cuda = torch.cuda.is_available()
 device = torch.device("cuda:0" if use_cuda else "cpu")
 gpu_count = torch.cuda.device_count()
 
-model_path = '/mydata/model-extraction/model-extraction-defense/models/checkpoint.budget100.pth.tar'
-model = models.resnet50()
-if gpu_count > 1:
-   model = nn.DataParallel(model)
-model = model.to(device)
+def main():
+    parser = argparse.ArgumentParser(description='Validate model')
+    parser.add_argument('--ckp_path', metavar='PATH', type=str,
+                        help='Checkpoint directory')
+    parser.add_argument('--dataset_name', metavar='TYPE', type=str, help='Name of validation dataset')
+    parser.add_argument('--model_name', metavar='TYPE', type=str, help='Model name', default="simnet")
+    parser.add_argument('--num_classes', metavar='TYPE', type=int, help='Number of classes')
+    parser.add_argument('--batch_size', metavar='TYPE', type=int, help='Batch size of queries', default=128)
+    parser.add_argument('--num_workers', metavar='TYPE', type=int, help='Number of processes of dataloader', default=10)
 
-optimizer_name = "adam"
-optimizer = get_optimizer(model.parameters(), optimizer_name)
-queryset_name = "ImageNet1k"
-modelfamily = datasets.dataset_to_modelfamily[queryset_name]
-transform = datasets.modelfamily_to_transforms[modelfamily]['test']
+    args = parser.parse_args()
+    params = vars(args)
 
-if osp.isfile(model_path):
-    print("=> loading checkpoint '{}'".format(model_path))
-    checkpoint = torch.load(model_path)
-    start_epoch = checkpoint['epoch']
-    best_test_acc = checkpoint['best_acc']
-    model.load_state_dict(checkpoint['state_dict'])
-    optimizer.load_state_dict(checkpoint['optimizer'])
-    print("=> loaded checkpoint (epoch {})".format(checkpoint['epoch']))
-else:
-    print("=> no checkpoint found at '{}'".format(model_path))
+    model_path = params['ckp_path']
+    model_name = params['model_name']
+    num_classes = params['num_classes']
+    dataset_name = params['dataset_name']
+    modelfamily = datasets.dataset_to_modelfamily[dataset_name]
+    model = zoo.get_net(model_name, modelfamily, num_classes=num_classes)
 
-dataset_name = "ImageNet1k"
-dataset = datasets.__dict__[dataset_name]
-testset = dataset(train=False, transform=transform)
-batch_size = 128
-num_workers = 10
-test_loader = DataLoader(testset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
-criterion_test = nn.CrossEntropyLoss(reduction='mean', weight=None)
+    transform = datasets.modelfamily_to_transforms[modelfamily]['test']
 
-tic = time.time()
-model_utils.test_step(model, test_loader, criterion_test, device)
-tac = time.time()
-print("validation time: {} min".format((tac - tic)/60))
+    if osp.isfile(model_path):
+        print("=> loading checkpoint '{}'".format(model_path))
+        checkpoint = torch.load(model_path)
+        start_epoch = checkpoint['epoch']
+        best_test_acc = checkpoint['best_acc']
+        model.load_state_dict(checkpoint['state_dict'])
+        print("=> loaded checkpoint (epoch {})".format(checkpoint['epoch']))
+    else:
+        print("=> no checkpoint found at '{}'".format(model_path))
+        exit(1)
+
+    if gpu_count > 1:
+       model = nn.DataParallel(model)
+    model = model.to(device)
+
+    dataset = datasets.__dict__[dataset_name]
+    testset = dataset(train=False, transform=transform)
+    batch_size = params['batch_size']
+    num_workers = params['num_workers']
+    test_loader = DataLoader(testset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
+    criterion_test = nn.CrossEntropyLoss(reduction='mean', weight=None)
+
+    tic = time.time()
+    model_utils.test_step(model, test_loader, criterion_test, device)
+    tac = time.time()
+    print("validation time: {} min".format((tac - tic)/60))
+
+if __name__ == '__main__':
+    main()

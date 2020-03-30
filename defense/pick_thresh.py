@@ -13,6 +13,7 @@ sys.path.append('/mydata/model-extraction/model-extraction-defense/')
 
 import numpy as np
 import random
+import matplotlib.pyplot as plt
 
 from tqdm import tqdm
 
@@ -47,6 +48,33 @@ class IdLayer(nn.Module):
     def forward(self, x):
         return x
 
+def get_pathset(src_set):
+    pathset = []
+    assert hasattr(src_set, 'samples'), "oh no, you don't have samples"
+    with tqdm(total=len(src_set)) as pbar:
+        for sample in src_set.samples:
+            img_t = sample[0]  # Image paths
+            pathset.append(img_t)
+            pbar.update(1)
+    return pathset
+
+class ImageDataGenerator(ImageFolder):
+    """ Load images from their directories"""
+
+    def __init__(self, samples, transform=None):
+        self.loader = default_loader
+        self.extensions = IMG_EXTENSIONS
+        self.samples = samples
+        self.n_samples = len(self.samples)
+        self.transform = transform
+
+    def __getitem__(self, index):
+        path = self.samples[index]
+        sample = self.loader(path)
+        x = self.transform(sample)
+        return x
+
+
 use_cuda = torch.cuda.is_available()
 device = torch.device("cuda:0" if use_cuda else "cpu")
 if use_cuda:
@@ -57,21 +85,21 @@ gpu_count = torch.cuda.device_count()
 
 # Reference: https://github.com/schoyc/blackbox-detection/blob/master/detection.py#L96
 def calculate_thresholds(training_data, K, encoder=lambda x: x, P=1000, up_to_K=False):
-    training_data = training_data.to(device)
+    #training_data = training_data.to(device)
     with torch.no_grad():
         data = encoder(training_data)
     distances = []
     for i in range(data.shape[0]//P):
         distance_mat = torch.cdist(data[i*P : (i+1)*P, :], data)
-        distance_mat_K, _ = torch.topk(distance_mat, largest=False)
+        distance_mat_K, _ = torch.topk(distance_mat, K, largest=False)
         
         distances.append(distance_mat_K)
-    distance_matrix = torch.concatenate(distances)
+    distance_matrix = torch.cat(distances)
     start = 0 if up_to_K else K
 
     THRESHORDS = []
     K_S = []
-    for k in rnage(start, K+1):
+    for k in range(start, K+1):
         dist_to_k_neighbors = distance_matrix[:, :k+1]
         avg_dist_to_k_neighbors = dist_to_k_neighbors.mean(dim=-1).cpu().numpy()
         threshold = np.percentile(avg_dist_to_k_neighbors, 0.1)
@@ -84,12 +112,9 @@ def main():
     parser.add_argument('--ckp_dir', metavar='PATH', type=str,
                         help='Destination directory to store trained model', default="/mydata/model-extraction/model-extraction-defense/defense/similarity_encoding")
     parser.add_argument('--dataset_name', metavar='TYPE', type=str, help='Name of adversary\'s dataset (P_A(X))', default='CIFAR10')
-    #parser.add_argument('--dataset_dir', metavar='TYPE', type=str, help='Directory of adversary\'s dataset (P_A(X))', required=True)
     parser.add_argument('--model_name', metavar='TYPE', type=str, help='Model name', default="simnet")
     parser.add_argument('--num_classes', metavar='TYPE', type=int, help='Number of classes', default=10)
-    parser.add_argument('--batch_size', metavar='TYPE', type=int, help='Batch size of queries', default=1)
-    parser.add_argument('--epochs', metavar='TYPE', type=int, help='Training epochs', default=50)
-    parser.add_argument('--optimizer_name', metavar='TYPE', type=str, help='Optimizer name', default="adam")
+    parser.add_argument('--out_dir', metavar='TYPE', type=str, help='Save output to where', default="/mydata/model-extraction/model-extraction-defense/defense/similarity_encoding")
 
     # ----------- Other params
     parser.add_argument('-d', '--device_id', metavar='D', type=int, help='Device id', default=0)
@@ -97,7 +122,7 @@ def main():
     args = parser.parse_args()
     params = vars(args)
 
-    ckp = params['ckp_dir']
+    
 
     #torch.manual_seed(cfg.DEFAULT_SEED)
     if params['device_id'] >= 0:
@@ -113,45 +138,51 @@ def main():
         raise ValueError('Dataset not found. Valid arguments = {}'.format(valid_datasets))
     modelfamily = datasets.dataset_to_modelfamily[dataset_name]
     transform = datasets.modelfamily_to_transforms[modelfamily]['test']
-    random_transform = transform_utils.RandomTransforms(modelfamily=modelfamily)
-    trainset = datasets.__dict__[dataset_name](train=True, transform=transform)
-    valset = datasets.__dict__[dataset_name](train=False, transform=transform)
 
-    model_name = params['model_name']
-    num_classes = params['num_classes']
-    model = zoo.get_net(model_name, modelfamily, num_classes=num_classes)
+    # ---------------- Load dataset
+    num_workers = params['nworkers']
+    train_dir = osp.join(cfg.DATASET_ROOT, 'cifar10/train')
+    train_folder = ImageFolder(train_dir)
+    train_pathset = get_pathset(train_folder)
+    trainset = ImageDataGenerator(train_pathset, transform=transform)
+    train_loader = DataLoader(trainset, batch_size=trainset.n_samples, shuffle=True, num_workers=num_workers)
 
-    #if gpu_count > 1:
-    #   model = nn.DataParallel(model)
-    model.last_linear = IdLayer().to(device)
-    model = model.to(device)
+    # ---------------- Calculate thresholds for each encoder
+    for train_data in train_loader:
+        for encoder_name in ["margin-31.6", "margin-10.0", "margin-3.2"]:
+            # ----------- Load Encoder
+            model_name = params['model_name']
+            num_classes = params['num_classes']
+            model = zoo.get_net(model_name, modelfamily, num_classes=num_classes)
+            model.last_linear = IdLayer()
+            ckp = params['ckp_dir']
+            ckp = osp.join(ckp, encoder_name, "checkpoint.pth.tar")
+            if osp.isfile(ckp):
+                print("=> loading checkpoint '{}'".format(ckp))
+                checkpoint = torch.load(ckp)
+                best_pacc = checkpoint['best_pacc']
+                best_nacc = checkpoint['best_nacc']
+                model.load_state_dict(checkpoint['state_dict'])
+                print("=> loaded checkpoint:\n best_pacc: {} \n best_nacc: {}".format(best_pacc, best_nacc))
+            else:
+                print("=> no checkpoint found at '{}'".format(ckp))
 
-    # Load a pretrained similarity encoder
-    if osp.isfile(ckp):
-        print("=> loading checkpoint '{}'".format(ckp))
-        checkpoint = torch.load(ckp)
-        best_pacc = checkpoint['best_pacc']
-        best_nacc = checkpoint['best_nacc']
-        model.load_state_dict(checkpoint['state_dict'])
-        print("=> loaded checkpoint:\n best_pacc: {} \n best_nacc: {}".format(best_pacc, best_nacc))
-    else:
-        print("=> no checkpoint found at '{}'".format(ckp))
-    
-    # Replace the last layer
-    model.last_linear = IdLayer().to(device)
-    #if gpu_count > 1:
-    #   model = nn.DataParallel(model)
-    model = model.to(device)
+            ks, thresholds = calculate_thresholds(train_data, K=1000, encoder=model, up_to_K=True)
 
-    batch_size = params['batch_size']
-    num_workers = params['num_workers']
-    train_loader = DataLoader(trainset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
-    encoded = []
-    with torch.no_grad():
-        for images, _ in train_loader:
-            images = images.to(device)
-            encoded_images = model(images)
-            encoded.extend([encoded_images[i] for i in range(encoded_images.size(0))])
+            out_dir = params['out_dir']
+            out_dir = osp.join(out_dir, encoder_name)
+
+            plt.plot(ks, thresholds, label=encoder_name)
+            plt.xlabel('k (# of nearest neighbors)')
+            plt.ylabel('Threshold (encodered space)')
+            #plt.title(f'Threshold vs k ({encoder_name})')
+            plt.savefig(osp.join(out_dir, f'k_thresh_plot_{encoder_name}.png'), bbox_inches='tight')
+            plt.show()
+            print(f"Save plot to {osp.join(out_dir, f'k_thresh_plot_{encoder_name}.png')}")
+
+            with open(osp.join(out_dir, 'k_n_thresh.pkl'), 'wb') as file:
+                print(f"Results save to {osp.join(out_dir, 'k_n_thresh.pkl')}")
+                pickle.dump([ks, thresholds], file)
 
 if __name__ == '__main__':
     main()

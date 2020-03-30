@@ -1,0 +1,1 @@
+python validate_model.py --ckp_path="/mydata/model-extraction/model-extraction-defense/defense/similarity_encoding/checkpoint.feat.pth.tar" --model_name="simnet" --dataset_name="CIFAR10" --num_classes=10

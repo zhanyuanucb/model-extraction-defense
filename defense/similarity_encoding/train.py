@@ -105,7 +105,7 @@ def get_pathset(src_set):
     with tqdm(total=len(src_set)) as pbar:
         for sample in src_set.samples:
             img_t = sample[0]  # Image paths
-            pathset.append(img_t) # 1 is a dummy label
+            pathset.append(img_t)
             pbar.update(1)
     return pathset
 
