@@ -211,7 +211,7 @@ def train_model(model, trainset, out_path, batch_size=64, criterion_train=None, 
             print("=> no checkpoint found at '{}'".format(model_path))
 
     # Initialize logging
-    log_path = osp.join(out_path, 'train{}.log.tsv'.format(checkpoint_suffix))
+    log_path = osp.join(out_path, 'train.{}.log.tsv'.format(checkpoint_suffix))
     if not osp.exists(log_path):
         with open(log_path, 'w') as wf:
             columns = ['run_id', 'epoch', 'split', 'loss', 'accuracy', 'best_accuracy']

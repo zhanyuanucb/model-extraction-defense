@@ -24,7 +24,7 @@ from torch.utils.data import Dataset, DataLoader
 import torchvision
 import torchvision.datasets as tvdatasets
 from torchvision.datasets.folder import ImageFolder, IMG_EXTENSIONS, default_loader
-from torchvision.transforms import transforms as tv_transforms
+from torchvision.transforms import transforms as tvtransforms
 
 from attack import datasets
 import attack.utils.transforms as transform_utils
@@ -158,9 +158,14 @@ def main():
         raise ValueError('Dataset not found. Valid arguments = {}'.format(valid_datasets))
     modelfamily = datasets.dataset_to_modelfamily[dataset_name]
     #transform = datasets.modelfamily_to_transforms[modelfamily]['test']
-    transform = tv_transforms.ToTensor()
+    transform = tvtransforms.ToTensor()
     random_transform = transform_utils.RandomTransforms(modelfamily=modelfamily)
-    trainset = datasets.__dict__[dataset_name](train=True, transform=transform)
+    trainset = datasets.__dict__[dataset_name](train=True, 
+            transform=tvtransforms.Compose([
+                                    tvtransforms.RandomHorizontalFlip(),
+                                    tvtransforms.RandomCrop(32, 4),
+                                    tvtransforms.ToTensor()
+                                    ])) # Augment data while training
     valset = datasets.__dict__[dataset_name](train=False, transform=transform)
 
     model_name = params['model_name']

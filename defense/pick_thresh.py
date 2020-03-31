@@ -24,6 +24,7 @@ import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
 import torchvision
 import torchvision.datasets as tvdatasets
+from torchvision.transforms import transforms as tvtransforms
 from torchvision.datasets.folder import ImageFolder, IMG_EXTENSIONS, default_loader
 
 from attack import datasets
@@ -92,16 +93,18 @@ def calculate_thresholds(training_data, K, encoder=lambda x: x, P=1000, up_to_K=
     for i in range(data.shape[0]//P):
         distance_mat = torch.cdist(data[i*P : (i+1)*P, :], data)
         distance_mat_K, _ = torch.topk(distance_mat, K, largest=False)
+        distance_mat_K = distance_mat_K[:, 1:]
         
         distances.append(distance_mat_K)
     distance_matrix = torch.cat(distances)
+
     start = 0 if up_to_K else K
 
     THRESHORDS = []
     K_S = []
     for k in range(start, K+1):
         dist_to_k_neighbors = distance_matrix[:, :k+1]
-        avg_dist_to_k_neighbors = dist_to_k_neighbors.mean(dim=-1).cpu().numpy()
+        avg_dist_to_k_neighbors = dist_to_k_neighbors.mean(dim=-1).numpy()
         threshold = np.percentile(avg_dist_to_k_neighbors, 0.1)
         K_S.append(k)
         THRESHORDS.append(threshold)
@@ -115,7 +118,7 @@ def main():
     parser.add_argument('--model_name', metavar='TYPE', type=str, help='Model name', default="simnet")
     parser.add_argument('--num_classes', metavar='TYPE', type=int, help='Number of classes', default=10)
     parser.add_argument('--out_dir', metavar='TYPE', type=str, help='Save output to where', default="/mydata/model-extraction/model-extraction-defense/defense/similarity_encoding")
-    parser.add_argument('--callback', metavar='TYPE', type=float, default="")
+    parser.add_argument('--callback', metavar='TYPE', type=str, default=None)
 
     # ----------- Other params
     parser.add_argument('-d', '--device_id', metavar='D', type=int, help='Device id', default=0)
@@ -138,7 +141,8 @@ def main():
     if dataset_name not in valid_datasets:
         raise ValueError('Dataset not found. Valid arguments = {}'.format(valid_datasets))
     modelfamily = datasets.dataset_to_modelfamily[dataset_name]
-    transform = datasets.modelfamily_to_transforms[modelfamily]['test']
+    #transform = datasets.modelfamily_to_transforms[modelfamily]['test']
+    transform = tvtransforms.ToTensor()
 
     # ---------------- Load dataset
     num_workers = params['nworkers']
@@ -167,11 +171,14 @@ def main():
                 best_nacc = checkpoint['best_nacc']
                 model.load_state_dict(checkpoint['state_dict'])
                 print("=> loaded checkpoint:\n best_pacc: {} \n best_nacc: {}".format(best_pacc, best_nacc))
-                print(f"Callback: {callback}%")
+                if callback:
+                    print(f"Callback: {callback}%")
+                else:
+                    print("No callback")
             else:
                 print("=> no checkpoint found at '{}'".format(ckp))
 
-            ks, thresholds = calculate_thresholds(train_data, K=1000, encoder=model, up_to_K=True)
+            ks, thresholds = calculate_thresholds(train_data, K=200, encoder=model, up_to_K=True)
 
             out_dir = params['out_dir']
             out_dir = osp.join(out_dir, encoder_name)
