@@ -6,7 +6,7 @@ from torchvision.transforms import transforms
 import sys
 sys.path.append('/mydata/model-extraction/model-extraction-defense/')
 import attack.config as cfg
-import random
+from numpy import random
 import PIL
 import torch
 
@@ -70,4 +70,5 @@ class RandomTransforms:
 
 
     def __call__(self, x):
-        return self.random_transform(x)
+        t = random.choice([self.noise_transform, self.affinecolor_transform], p=[0.25, 0.75])
+        return t(x)

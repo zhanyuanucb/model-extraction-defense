@@ -157,15 +157,10 @@ def main():
     if dataset_name not in valid_datasets:
         raise ValueError('Dataset not found. Valid arguments = {}'.format(valid_datasets))
     modelfamily = datasets.dataset_to_modelfamily[dataset_name]
-    #transform = datasets.modelfamily_to_transforms[modelfamily]['test']
+    #train_transform = datasets.modelfamily_to_transforms[modelfamily]['test']
     transform = tvtransforms.ToTensor()
     random_transform = transform_utils.RandomTransforms(modelfamily=modelfamily)
-    trainset = datasets.__dict__[dataset_name](train=True, 
-            transform=tvtransforms.Compose([
-                                    tvtransforms.RandomHorizontalFlip(),
-                                    tvtransforms.RandomCrop(32, 4),
-                                    tvtransforms.ToTensor()
-                                    ])) # Augment data while training
+    trainset = datasets.__dict__[dataset_name](train=True, transform=datasets.modelfamily_to_transforms[modelfamily]['train2']) # Augment data while training
     valset = datasets.__dict__[dataset_name](train=False, transform=transform)
 
     model_name = params['model_name']

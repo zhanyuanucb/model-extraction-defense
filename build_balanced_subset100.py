@@ -9,8 +9,8 @@ import numpy as np
 
 import shutil
 
-dataset_dir = osp.join(cfg.DATASET_ROOT, "mnist/MNIST/processed/train") 
-dest_root = osp.join("/mydata/model-extraction/data/mnist_balanced_subset100")
+dataset_dir = osp.join(cfg.DATASET_ROOT, "cifar10/train") 
+dest_root = osp.join("/mydata/model-extraction/data/cifar10_balanced_subset100")
 SIZE = 10
 for c in os.listdir(dataset_dir):
     # sample SIZE images from each class

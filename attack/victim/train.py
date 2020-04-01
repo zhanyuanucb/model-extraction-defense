@@ -83,8 +83,9 @@ def main():
     dataset = datasets.__dict__[dataset_name]
 
     modelfamily = datasets.dataset_to_modelfamily[dataset_name]
-    train_transform = datasets.modelfamily_to_transforms[modelfamily]['train']
-    test_transform = datasets.modelfamily_to_transforms[modelfamily]['test']
+    # Noet: train2 and test2 have no normalization
+    train_transform = datasets.modelfamily_to_transforms[modelfamily]['train2']
+    test_transform = datasets.modelfamily_to_transforms[modelfamily]['test2']
     trainset = dataset(train=True, transform=train_transform)
     testset = dataset(train=False, transform=test_transform)
     num_classes = len(trainset.classes)

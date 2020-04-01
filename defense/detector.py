@@ -33,13 +33,13 @@ class Detector:
         self.history = None
         self.log_file = osp.join(log_dir, f"detector.{log_suffix}.log.tsv")
     
-    def _init(self, blackbox_dir, device):
+    def init(self, blackbox_dir, device):
         self.blackbox = Blackbox.from_modeldir(blackbox_dir, device)
         self._init_log()
     
     def _process_query(self, images):
         encoding = self.encoder(images)
-        if not self.history: # If the history is empty
+        if self.history is None:
             self.history = encoding.clone()
             return False
         if self.history.size(0) < self.K:
@@ -47,7 +47,8 @@ class Detector:
             return False
         self.history = torch.cat([self.history, encoding])
         dist_mat = torch.cdist(encoding, self.history)
-        dist_mat_k, _ = torch.topk(dist_mat, self.K, largest=False)[:, 1:]
+        dist_mat_k, _ = torch.topk(dist_mat, self.K, largest=False)
+        dist_mat_k = dist_mat_k[:, 1:]
         avg_dist_to_k_neighbors = dist_mat_k.mean(dim=-1)
         activated = avg_dist_to_k_neighbors.le(self.thresh).sum().item()
         return activated > 0
@@ -56,7 +57,7 @@ class Detector:
         if not osp.exists(self.log_file):
             with open(self.log_file, 'w') as log:
                 columns = ["Query Count", "Detect Adversarial", "Message"]
-                log.writhe('\t'.join(columns) + '\n')
+                log.write('\t'.join(columns) + '\n')
         print(f"Created log file at {self.log_file}")
 
     def _write_log(self, message):
@@ -70,11 +71,11 @@ class Detector:
         self.detect_adv = False
 
     def __call__(self, images):
-        # ---- Going through detection
+        # ---- Going through detection in CPU
         self.query_count += images.size(0)
         self.detect_adv = self._process_query(images)
         if self.detect_adv:
-            msg = "Detected an adversarial behavior, so stop service"
+            msg = "Detected an adversarial behavior, so stop the service."
             print(msg)
             self._write_log(msg)
             self._reset()

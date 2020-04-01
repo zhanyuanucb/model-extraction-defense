@@ -71,7 +71,7 @@ def main():
     if seedset_name not in valid_datasets:
         raise ValueError('Dataset not found. Valid arguments = {}'.format(valid_datasets))
     modelfamily = datasets.dataset_to_modelfamily[seedset_name]
-    transform = datasets.modelfamily_to_transforms[modelfamily]['test']
+    transform = datasets.modelfamily_to_transforms[modelfamily]['test2'] # Note: test2 has no normalization
     seedset = tvdatasets.ImageFolder(seedset_dir, transform=transform)
 
 

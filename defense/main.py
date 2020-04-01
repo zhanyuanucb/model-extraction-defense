@@ -17,9 +17,9 @@ from torchvision.datasets.folder import ImageFolder, IMG_EXTENSIONS, default_loa
 import attack.config as cfg
 import attack.utils.model as model_utils
 from attack import datasets
-from attack.adversary.adv import*
+#from attack.adversary.adv import*
 import modelzoo.zoo as zoo
-from attack.victim.blackbox import Blackbox
+#from attack.victim.blackbox import Blackbox
 from detector import *
 
 __author = "Zhanyuan Zhang"
@@ -97,16 +97,25 @@ def get_optimizer(parameters, optimizer_type, lr=0.01, momentum=0.5, **kwargs):
         raise ValueError('Unrecognized optimizer type')
     return optimizer
 
-params = {"model_name":"pnet",
-          "modelfamily":"mnist",
-          "out_root":"/mydata/model-extraction/model-extraction-defense/attack/adversary/models/mnist/papernot",
+params = {"model_name":"resnet18",
+          "modelfamily":"cifar",
+          "num_classes":10,
+          "out_root":"/mydata/model-extraction/model-extraction-defense/attack/adversary/models/cifar10/",
           "batch_size":128,
           "eps":0.1,
           "steps":1,
+          "phi":10,
           "momentum":0,
-          "seedset_dir":"/mydata/model-extraction/model-extraction-defense/attack/adversary/models/mnist",
-          "testset_name":"MNIST",
-          "optimizer_name":"adam"}
+          "blackbox_dir":'/mydata/model-extraction/model-extraction-defense/attack/victim/models/cifar10/wo_normalization',
+          "seedset_dir":"/mydata/model-extraction/model-extraction-defense/attack/adversary/models/cifar10",
+          "testset_name":"CIFAR10",
+          "optimizer_name":"adam",
+          "encoder_ckp":"/mydata/model-extraction/model-extraction-defense/defense/similarity_encoding/margin-3.2",
+          "encoder_margin":3.2,
+          "k":200,
+          "thresh":0.178,
+          "log_suffix":"testing",
+          "log_dir":"./"}
 
 # ------------ Start
 use_cuda = torch.cuda.is_available()
@@ -117,14 +126,33 @@ else:
     print(device)
 gpu_count = torch.cuda.device_count()
 
-# ----------- Initialize blackbox
-blackbox_dir = '/mydata/model-extraction/model-extraction-defense/attack/victim/models/mnist'
-blackbox = Detector.from_modeldir(blackbox_dir, device)
+# ----------- Initialize detector
+k = params["k"]
+thresh = params["thresh"]
+log_suffix = params["log_suffix"]
+log_dir = params["log_dir"]
+modelfamily = params["modelfamily"]
+num_classes = 10
+encoder = zoo.get_net("simnet", modelfamily, num_classes=num_classes)
+
+#             Setup encoder
+encoder_ckp = params["encoder_ckp"]
+encoder_margin = params["encoder_margin"]
+ckp = osp.join(encoder_ckp, f"checkpoint.sim-{encoder_margin}-None.pth.tar")
+print(f"=> loading encoder checkpoint '{ckp}'")
+checkpoint = torch.load(ckp)
+start_epoch = checkpoint['epoch']
+encoder.load_state_dict(checkpoint['state_dict'])
+print("=> loaded checkpoint (epoch {})".format(checkpoint['epoch']))
+
+encoder = encoder.to(device)
+
+detector = Detector(k, thresh, encoder, log_suffix=log_suffix, log_dir=log_dir)
+blackbox_dir = params["blackbox_dir"]
+detector.init(blackbox_dir, device)
 
 # ----------- Initialize adversary model
 model_name = params["model_name"]
-modelfamily = params["modelfamily"]
-num_classes = 10
 # model = model_utils.get_net(model_name, n_output_classes=num_classes, pretrained=pretrained)
 model = zoo.get_net(model_name, modelfamily, num_classes=num_classes)
 
@@ -140,7 +168,7 @@ batch_size = params["batch_size"]
 eps = params["eps"]
 steps= params["steps"]
 momentum= params["momentum"]
-adversary = JDAAdversary(model, blackbox, eps=eps, batch_size=batch_size, steps=steps, momentum=momentum)
+adversary = JDAAdversary(model, detector, eps=eps, batch_size=batch_size, steps=steps, momentum=momentum)
 
 # ----------- Set up transferset
 seedset_path = osp.join(params["seedset_dir"], 'seed.pickle')
@@ -166,7 +194,7 @@ np.random.seed(cfg.DEFAULT_SEED)
 torch.manual_seed(cfg.DEFAULT_SEED)
 torch.cuda.manual_seed(cfg.DEFAULT_SEED)
 
-transferset = MNISTSeedsetImagePaths(transferset_samples, transform=transform)
+transferset = TransferSetImagePaths(transferset_samples, transform=transform)
 print()
 print('=> Training at budget = {}'.format(len(transferset)))
 
@@ -177,9 +205,10 @@ optimizer = get_optimizer(model.parameters(), optimizer_name)
 criterion_train = model_utils.soft_cross_entropy
 
 #--------- Extraction
-phi = 6
-budget = (step+1)**phi*len(transferset)
-checkpoint_suffix = '.budget{}-papernot'.format(budget)
+phi = params["phi"]
+steps = params["steps"]
+budget = (steps+1)**phi*len(transferset)
+checkpoint_suffix = '.budget{}'.format(budget)
 testloader = testset
 epochs = 10
 num_workers = 10
@@ -195,7 +224,7 @@ for p in range(1, phi+1):
         pickle.dump(transferset_samples, wf)
     print('=> transfer set ({} samples) written to: {}'.format(len(transferset_samples), substitute_out_path))
 
-    transferset = MNISTSeedsetImagePaths(transferset_samples, transform=transform)
+    transferset = TransferSetImagePaths(transferset_samples, transform=transform)
     print(f"Substitute training epoch {p}")
     print(f"Current size of the substitute set {len(transferset)}")
     _, train_loader = model_utils.train_model(model, transferset, out_root, epochs=epochs, testset=testloader, criterion_train=criterion_train,

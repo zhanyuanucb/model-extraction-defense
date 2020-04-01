@@ -1,3 +1,5 @@
+import sys
+sys.path.append('/mydata/model-extraction/model-extraction-defense/attack/adversary')
 from jda import*
 import attack.config as cfg
 from tqdm import tqdm
@@ -46,7 +48,9 @@ class RandomAdversary(object):
                     self.idx_set = set(range(len(self.queryset)))
 
                 # Only for MNIST
-                x_t = torch.stack([self.queryset[i][0][0][None] for i in idxs]).cuda()
+                #x_t = torch.stack([self.queryset[i][0][0][None] for i in idxs]).cuda()
+                x_t = torch.stack([self.queryset[i][0] for i in idxs]).cuda()
+
                 y_t = self.blackbox(x_t).cpu()
 
                 if hasattr(self.queryset, 'samples'):
