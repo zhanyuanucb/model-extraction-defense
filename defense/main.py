@@ -138,7 +138,7 @@ encoder = zoo.get_net("simnet", modelfamily, num_classes=num_classes)
 #             Setup encoder
 encoder_ckp = params["encoder_ckp"]
 encoder_margin = params["encoder_margin"]
-ckp = osp.join(encoder_ckp, f"checkpoint.sim-{encoder_margin}-None.pth.tar")
+ckp = osp.join(encoder_ckp, f"checkpoint.sim-{encoder_margin}.pth.tar")
 print(f"=> loading encoder checkpoint '{ckp}'")
 checkpoint = torch.load(ckp)
 start_epoch = checkpoint['epoch']

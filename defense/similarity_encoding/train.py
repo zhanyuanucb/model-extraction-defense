@@ -218,7 +218,7 @@ def main():
     margin_train = params['margin']
     margin_test = margin_train
     sim_epochs = params['sim_epochs']
-    checkpoint_suffix = ".sim-{:.1f}-{}".format(margin_test, callback)
+    checkpoint_suffix = ".sim-{:.1f}".format(margin_test)
     out_path = osp.join(out_path, "margin-{:.1f}".format(margin_test))
     if not osp.exists(out_path):
         os.mkdir(out_path)
