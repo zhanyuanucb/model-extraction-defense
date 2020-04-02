@@ -7,8 +7,8 @@ import os.path as osp
 
 use_cuda = torch.cuda.is_available()
 device = torch.device("cuda:0" if use_cuda else "cpu")
-MEAN = np.array([0.485, 0.456, 0.406]).reshape((3, 1, 1))
-STD = np.array([[0.229, 0.224, 0.225]]).reshape((3, 1, 1))
+#MEAN = np.array([0.485, 0.456, 0.406]).reshape((3, 1, 1))
+#STD = np.array([[0.229, 0.224, 0.225]]).reshape((3, 1, 1))
 class MultiStepJDA:
     def __init__(self, adversary_model, blackbox, criterion=model_utils.soft_cross_entropy, eps=0.1, batchsize=64, input_shape=[3, 224, 224], steps=1, momentum=0):
         self.adversary_model = adversary_model
@@ -52,12 +52,12 @@ class MultiStepJDA:
                 y = self.blackbox(images)
                 for i in range(images.size(0)):
                     image_i = images[i].squeeze().cpu().numpy()
-                    image_i = image_i*STD + MEAN # undo preprocessing
+                    #image_i = image_i*STD + MEAN # undo preprocessing
                     image_i = image_i.transpose([1, 2, 0])
-                    # TODO: Confirm the range of valid pixel value
                     image_i = np.clip(image_i, 0, 1)
                     save_path_i = osp.join(out_dir, f"{img_count}.png")
-                    plt.imsave(save_path_i, image_i, cmap='gray')
+                    #plt.imsave(save_path_i, image_i, cmap='gray') # For mnist
+                    plt.imsave(save_path_i, image_i)
                     img_count += 1
                     augset.append((save_path_i, y[i].cpu().squeeze()))
         return augset

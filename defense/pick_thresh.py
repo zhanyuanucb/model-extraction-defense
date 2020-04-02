@@ -118,7 +118,8 @@ def main():
     parser.add_argument('--model_name', metavar='TYPE', type=str, help='Model name', default="simnet")
     parser.add_argument('--num_classes', metavar='TYPE', type=int, help='Number of classes', default=10)
     parser.add_argument('--out_dir', metavar='TYPE', type=str, help='Save output to where', default="/mydata/model-extraction/model-extraction-defense/defense/similarity_encoding")
-    parser.add_argument('--callback', metavar='TYPE', type=str, default=None)
+    parser.add_argument('--K', metavar='TYPE', type=int, help="K nearest neighbors", default=200)
+    parser.add_argument('--up_to_K', metavar='TYPE', type=int, help="Calculate threshold up to K", default=1)
 
     # ----------- Other params
     parser.add_argument('-d', '--device_id', metavar='D', type=int, help='Device id', default=0)
@@ -153,7 +154,6 @@ def main():
     train_loader = DataLoader(trainset, batch_size=trainset.n_samples, shuffle=True, num_workers=num_workers)
 
     # ---------------- Calculate thresholds for each encoder
-    callback = params['callback']
     for train_data in train_loader:
         for margin in [31.6, 10.0, 3.2]:
             encoder_name = f"margin-{margin}"
@@ -163,7 +163,7 @@ def main():
             model = zoo.get_net(model_name, modelfamily, num_classes=num_classes)
             model.last_linear = IdLayer()
             ckp = params['ckp_dir']
-            ckp = osp.join(ckp, encoder_name, f"checkpoint.sim-{margin}-{callback}.pth.tar")
+            ckp = osp.join(ckp, encoder_name, f"checkpoint.sim-{margin}.pth.tar")
             if osp.isfile(ckp):
                 print("=> loading checkpoint '{}'".format(ckp))
                 checkpoint = torch.load(ckp)
@@ -171,14 +171,16 @@ def main():
                 best_nacc = checkpoint['best_nacc']
                 model.load_state_dict(checkpoint['state_dict'])
                 print("=> loaded checkpoint:\n best_pacc: {} \n best_nacc: {}".format(best_pacc, best_nacc))
-                if callback:
-                    print(f"Callback: {callback}%")
-                else:
-                    print("No callback")
+                #if callback:
+                    #print(f"Callback: {callback}%")
+                #else:
+                    #print("No callback")
             else:
                 print("=> no checkpoint found at '{}'".format(ckp))
 
-            ks, thresholds = calculate_thresholds(train_data, K=200, encoder=model, up_to_K=True)
+            K = params['K']
+            up_to_K = bool(params["up_to_K"])
+            ks, thresholds = calculate_thresholds(train_data, K=K, encoder=model, up_to_K=up_to_K)
 
             out_dir = params['out_dir']
             out_dir = osp.join(out_dir, encoder_name)
@@ -187,12 +189,12 @@ def main():
             plt.xlabel('k (# of nearest neighbors)')
             plt.ylabel('Threshold (encodered space)')
             plt.title(f'Threshold vs k ({encoder_name})')
-            plt.savefig(osp.join(out_dir, f'k_thresh_plot_{encoder_name}-{callback}.png'), bbox_inches='tight')
+            plt.savefig(osp.join(out_dir, f'k_thresh_plot_{encoder_name}.png'), bbox_inches='tight')
             plt.clf()
-            print(f"Save plot to {osp.join(out_dir, f'k_thresh_plot_{encoder_name}-{callback}.png')}")
+            print(f"Save plot to {osp.join(out_dir, f'k_thresh_plot_{encoder_name}.png')}")
 
-            with open(osp.join(out_dir, f'k_n_thresh_{callback}.pkl'), 'wb') as file:
-                print(f"Results save to {osp.join(out_dir, f'k_n_thresh_{callback}.pkl')}")
+            with open(osp.join(out_dir, 'k_n_thresh.pkl'), 'wb') as file:
+                print(f"Results save to {osp.join(out_dir, 'k_n_thresh.pkl')}")
                 pickle.dump([ks, thresholds], file)
 
 if __name__ == '__main__':

@@ -26,6 +26,7 @@ class Detector:
     def __init__(self, k, thresh, encoder, log_suffix="", log_dir="./"):
         self.blackbox = None
         self.query_count = 0
+        self.detection_count = 0
         self.K = k
         self.thresh = thresh
         self.encoder = encoder
@@ -71,19 +72,16 @@ class Detector:
         self.detect_adv = False
 
     def __call__(self, images):
-        # ---- Going through detection in CPU
+        # ---- Going through detection
         self.query_count += images.size(0)
         self.detect_adv = self._process_query(images)
         if self.detect_adv:
-            msg = "Detected an adversarial behavior, so stop the service."
+            self.detection_count += 1
+            msg = f"Detected {self.detection_count} adversarial behavior(s)."
             print(msg)
             self._write_log(msg)
             self._reset()
-            print("Reset detector.")
-            exit(1)
-            return None
+            print("Reset history.")
         # ----------------------------
-        msg = "No advsersarial behavior detected."
-        self._write_log(msg)
         images = images.cuda()
         return self.blackbox(images)

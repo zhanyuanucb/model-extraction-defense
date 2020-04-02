@@ -103,8 +103,8 @@ params = {"model_name":"resnet18",
           "out_root":"/mydata/model-extraction/model-extraction-defense/attack/adversary/models/cifar10/",
           "batch_size":128,
           "eps":0.1,
-          "steps":1,
-          "phi":10,
+          "steps":4,
+          "phi":3,
           "momentum":0,
           "blackbox_dir":'/mydata/model-extraction/model-extraction-defense/attack/victim/models/cifar10/wo_normalization',
           "seedset_dir":"/mydata/model-extraction/model-extraction-defense/attack/adversary/models/cifar10",
@@ -113,7 +113,7 @@ params = {"model_name":"resnet18",
           "encoder_ckp":"/mydata/model-extraction/model-extraction-defense/defense/similarity_encoding/margin-3.2",
           "encoder_margin":3.2,
           "k":200,
-          "thresh":0.178,
+          "thresh":0.334,
           "log_suffix":"testing",
           "log_dir":"./"}
 
@@ -210,7 +210,7 @@ steps = params["steps"]
 budget = (steps+1)**phi*len(transferset)
 checkpoint_suffix = '.budget{}'.format(budget)
 testloader = testset
-epochs = 10
+epochs = 20
 num_workers = 10
 train_loader = DataLoader(transferset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
 for p in range(1, phi+1):
