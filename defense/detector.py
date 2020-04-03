@@ -57,13 +57,13 @@ class Detector:
     def _init_log(self):
         if not osp.exists(self.log_file):
             with open(self.log_file, 'w') as log:
-                columns = ["Query Count", "Detect Adversarial", "Message"]
+                columns = ["Query Count", "Detection Count"]
                 log.write('\t'.join(columns) + '\n')
         print(f"Created log file at {self.log_file}")
 
-    def _write_log(self, message='None'):
+    def _write_log(self):
         with open(self.log_file, 'a') as log:
-            columns = [str(self.query_count), str(self.detect_adv), message]
+            columns = [str(self.query_count), str(self.detection_count), message]
             log.write('\t'.join(columns) + '\n')
     
     def _reset(self):
@@ -77,9 +77,9 @@ class Detector:
         self.detect_adv = self._process_query(images)
         if self.detect_adv:
             self.detection_count += 1
-            msg = f"Detected {self.detection_count} adversarial behavior(s)."
+            msg = f"{self.query_count} queries: Detected {self.detection_count} adversarial behavior(s)."
             print(msg)
-            self._write_log(message=msg)
+            self._write_log()
             self._reset()
             print("Reset history.")
         # ----------------------------
