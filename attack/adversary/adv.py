@@ -1,4 +1,5 @@
 import sys
+import pickle
 sys.path.append('/mydata/model-extraction/model-extraction-defense/attack/adversary')
 from jda import*
 import attack.config as cfg
@@ -16,9 +17,10 @@ device = torch.device("cuda:0" if use_cuda else "cpu")
 gpu_count = torch.cuda.device_count()
 
 class RandomAdversary(object):
-    def __init__(self, blackbox, queryset, batch_size=8):
+    def __init__(self, blackbox, queryset, out_path, batch_size=8):
         self.blackbox = blackbox
         self.queryset = queryset
+        self.out_path = out_path
 
         self.n_queryset = len(self.queryset)
         self.batch_size = batch_size
@@ -47,26 +49,33 @@ class RandomAdversary(object):
                     print('=> Query set exhausted. Now repeating input examples.')
                     self.idx_set = set(range(len(self.queryset)))
 
-                # Only for MNIST
-                #x_t = torch.stack([self.queryset[i][0][0][None] for i in idxs]).cuda()
-                x_t = torch.stack([self.queryset[i][0] for i in idxs]).cuda()
+                #x_t = torch.stack([self.queryset[i][0][0][None] for i in idxs]).cuda() # Only for MNIST
+                x_t, pickle_out_paths = [], []
+                for i in idxs:
+                    x_t_i = self.queryset[i][0]
+                    pickle_out_path_i = osp.join(self.out_path, f"{i}.pickle")
+                    pickle_out_paths.append(pickle_out_path_i)
+                    with open(pickle_out_path_i, 'wb') as file:
+                        pickle.dump(x_t_i, file)
+                    x_t.append(x_t_i)
 
+                x_t = torch.stack(x_t)
+                x_t = x_t.cuda()
                 y_t = self.blackbox(x_t).cpu()
 
-                if hasattr(self.queryset, 'samples'):
-                    # Any DatasetFolder (or subclass) has this attribute
-                    # Saving image paths are space-efficient
-                    img_t = [self.queryset.samples[i][0] for i in idxs]  # Image paths
-                else:
-                    # Otherwise, store the image itself
-                    # But, we need to store the non-transformed version
-                    img_t = [self.queryset.data[i] for i in idxs]
-                    if isinstance(self.queryset.data[0], torch.Tensor):
-                        img_t = [x.numpy() for x in img_t]
+                #if hasattr(self.queryset, 'samples'):
+                #    # Any DatasetFolder (or subclass) has this attribute
+                #    # Saving image paths are space-efficient
+                #    img_t = [self.queryset.samples[i][0] for i in idxs]  # Image paths
+                #else:
+                #    # Otherwise, store the image itself
+                #    # But, we need to store the non-transformed version
+                #    img_t = [self.queryset.data[i] for i in idxs]
+                #    if isinstance(self.queryset.data[0], torch.Tensor):
+                #        img_t = [x.numpy() for x in img_t]
 
                 for i in range(x_t.size(0)):
-                    img_t_i = img_t[i].squeeze() if isinstance(img_t[i], np.ndarray) else img_t[i]
-                    self.seedset.append((img_t_i, y_t[i].cpu().squeeze()))
+                    self.seedset.append((pickle_out_paths[i], y_t[i].cpu().squeeze()))
 
                 pbar.update(x_t.size(0))
 

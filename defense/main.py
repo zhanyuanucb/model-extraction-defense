@@ -83,6 +83,34 @@ class TransferSetImages(Dataset):
     def __len__(self):
         return len(self.data)
 
+class ImagePicklePath(Dataset):
+    def __init__(self, samples, transform=None, target_transform=None):
+        self.samples = samples
+        self.transform = transform
+        self.target_transform = target_transform
+
+        self.data = [self.samples[i][0] for i in range(len(self.samples))]
+        self.targets = [self.samples[i][1] for i in range(len(self.samples))]
+
+    def __getitem__(self, index):
+        pickle_path, target = self.data[index], self.targets[index]
+
+        # doing this so that it is consistent with all other datasets
+        # to return a PIL Image
+        with open(pickle_path, 'rb') as file:
+            img = pickle.load(file)
+
+        if self.transform is not None:
+            img = self.transform(img)
+
+        if self.target_transform is not None:
+            target = self.target_transform(target)
+
+        return img, target
+
+    def __len__(self):
+        return len(self.data)
+
 def get_optimizer(parameters, optimizer_type, lr=0.01, momentum=0.5, **kwargs):
     assert optimizer_type in ['sgd', 'sgdm', 'adam', 'adagrad']
     if optimizer_type == 'sgd':
@@ -105,6 +133,7 @@ params = {"model_name":"resnet18",
           "eps":0.1,
           "steps":4,
           "phi":3,
+          "epochs":10,
           "momentum":0,
           "blackbox_dir":'/mydata/model-extraction/model-extraction-defense/attack/victim/models/cifar10/wo_normalization',
           "seedset_dir":"/mydata/model-extraction/model-extraction-defense/attack/adversary/models/cifar10",
@@ -145,7 +174,7 @@ start_epoch = checkpoint['epoch']
 encoder.load_state_dict(checkpoint['state_dict'])
 print("=> loaded checkpoint (epoch {})".format(checkpoint['epoch']))
 
-encoder = encoder.to(device)
+#encoder = encoder.to(device)
 
 detector = Detector(k, thresh, encoder, log_suffix=log_suffix, log_dir=log_dir)
 blackbox_dir = params["blackbox_dir"]
@@ -181,7 +210,7 @@ print('=> found transfer set with {} samples, {} classes'.format(len(transferset
 testset_name = params["testset_name"]
 valid_datasets = datasets.__dict__.keys()
 modelfamily = datasets.dataset_to_modelfamily[testset_name]
-transform = datasets.modelfamily_to_transforms[modelfamily]['test']
+transform = datasets.modelfamily_to_transforms[modelfamily]['test2'] # test2 has no normalization
 if testset_name not in valid_datasets:
     raise ValueError('Dataset not found. Valid arguments = {}'.format(valid_datasets))
 dataset = datasets.__dict__[testset_name]
@@ -194,7 +223,7 @@ np.random.seed(cfg.DEFAULT_SEED)
 torch.manual_seed(cfg.DEFAULT_SEED)
 torch.cuda.manual_seed(cfg.DEFAULT_SEED)
 
-transferset = TransferSetImagePaths(transferset_samples, transform=transform)
+transferset = ImagePicklePath(transferset_samples)
 print()
 print('=> Training at budget = {}'.format(len(transferset)))
 
@@ -208,9 +237,9 @@ criterion_train = model_utils.soft_cross_entropy
 phi = params["phi"]
 steps = params["steps"]
 budget = (steps+1)**phi*len(transferset)
-checkpoint_suffix = '.budget{}'.format(budget)
+checkpoint_suffix = 'budget{}'.format(budget)
 testloader = testset
-epochs = 20
+epochs = params["epochs"]
 num_workers = 10
 train_loader = DataLoader(transferset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
 for p in range(1, phi+1):
@@ -224,7 +253,7 @@ for p in range(1, phi+1):
         pickle.dump(transferset_samples, wf)
     print('=> transfer set ({} samples) written to: {}'.format(len(transferset_samples), substitute_out_path))
 
-    transferset = TransferSetImagePaths(transferset_samples, transform=transform)
+    transferset = ImagePicklePath(transferset_samples)
     print(f"Substitute training epoch {p}")
     print(f"Current size of the substitute set {len(transferset)}")
     _, train_loader = model_utils.train_model(model, transferset, out_root, epochs=epochs, testset=testloader, criterion_train=criterion_train,

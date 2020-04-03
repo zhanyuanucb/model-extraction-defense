@@ -4,6 +4,7 @@ import attack.utils.model as model_utils
 import matplotlib.pyplot as plt
 import numpy as np
 import os.path as osp
+import pickle
 
 use_cuda = torch.cuda.is_available()
 device = torch.device("cuda:0" if use_cuda else "cpu")
@@ -20,21 +21,22 @@ class MultiStepJDA:
         self.v = None 
     
     def reset_v(self, input_shape):
-        self.v = torch.zeros(input_shape, dtype=torch.float32).to(device)
+        self.v = torch.zeros(input_shape, dtype=torch.float32)#.to(device)
 
     def get_jacobian(self, images, labels):
+        images, labels = images.to(device), labels.to(device)
         images.requires_grad_(True)
         logits = self.adversary_model(images)
-        loss = self.criterion(logits, labels.to(torch.long).to(logits.device))
+        loss = self.criterion(logits, labels.to(torch.long))#.to(logits.device))
         loss.backward()
         jacobian = images.grad.cpu()
         images.requires_grad_(False)
         return jacobian
 
     def augment_step(self, images, labels):
-        images, labels = images.to(device), labels.to(device)
+        #images, labels = images.to(device), labels.to(device)
         jacobian = self.get_jacobian(images, labels)
-        self.v = self.momentum * self.v + self.lam*torch.sign(jacobian).to(device)
+        self.v = self.momentum * self.v + self.lam*torch.sign(jacobian)#.to(device)
         return images + self.v
 
     def augment(self, dataloader, out_dir):
@@ -48,16 +50,17 @@ class MultiStepJDA:
 
             for _ in range(self.steps):
                 images = self.augment_step(images, labels)
-                images = images.to(device)
+                #images = images.to(device)
                 y = self.blackbox(images)
                 for i in range(images.size(0)):
-                    image_i = images[i].squeeze().cpu().numpy()
-                    #image_i = image_i*STD + MEAN # undo preprocessing
-                    image_i = image_i.transpose([1, 2, 0])
-                    image_i = np.clip(image_i, 0, 1)
-                    save_path_i = osp.join(out_dir, f"{img_count}.png")
-                    #plt.imsave(save_path_i, image_i, cmap='gray') # For mnist
-                    plt.imsave(save_path_i, image_i)
+                    image_i = images[i].squeeze().cpu()
+                    #image_i = image_i.transpose([1, 2, 0])
+                    #image_i = np.clip(image_i, 0, 1) # No clipping
+                    save_path_i = osp.join(out_dir, f"{img_count}.pickle")
+                    #plt.imsave(save_path_i, image_i, cmap='gray') # For MNIST
+                    with open(save_path_i, 'wb') as file:
+                        pickle.dump(image_i, file)
+                    #plt.imsave(save_path_i, image_i)
                     img_count += 1
                     augset.append((save_path_i, y[i].cpu().squeeze()))
         return augset

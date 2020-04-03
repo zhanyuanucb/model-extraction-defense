@@ -61,7 +61,7 @@ class Detector:
                 log.write('\t'.join(columns) + '\n')
         print(f"Created log file at {self.log_file}")
 
-    def _write_log(self, message):
+    def _write_log(self, message='None'):
         with open(self.log_file, 'a') as log:
             columns = [str(self.query_count), str(self.detect_adv), message]
             log.write('\t'.join(columns) + '\n')
@@ -72,14 +72,14 @@ class Detector:
         self.detect_adv = False
 
     def __call__(self, images):
-        # ---- Going through detection
+        # ---- Going through detection in CPU
         self.query_count += images.size(0)
         self.detect_adv = self._process_query(images)
         if self.detect_adv:
             self.detection_count += 1
             msg = f"Detected {self.detection_count} adversarial behavior(s)."
             print(msg)
-            self._write_log(msg)
+            self._write_log(message=msg)
             self._reset()
             print("Reset history.")
         # ----------------------------

@@ -83,7 +83,8 @@ def main():
     batch_size = params['batch_size']
     nworkers = params['nworkers']
     seed_out_path = osp.join(out_path, 'seed.pickle')
-    adversary = RandomAdversary(blackbox, seedset, batch_size=batch_size)
+    pickle_out_path = osp.join(out_path, 'seed_pickle')
+    adversary = RandomAdversary(blackbox, seedset, out_path=pickle_out_path, batch_size=batch_size)
 
     print('=> constructing seedset...')
     transferset = adversary.get_seedset()
