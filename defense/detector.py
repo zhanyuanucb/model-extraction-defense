@@ -63,7 +63,7 @@ class Detector:
 
     def _write_log(self):
         with open(self.log_file, 'a') as log:
-            columns = [str(self.query_count), str(self.detection_count), message]
+            columns = [str(self.query_count), str(self.detection_count)]
             log.write('\t'.join(columns) + '\n')
     
     def _reset(self):
