@@ -55,7 +55,6 @@ class MNISTSeedsetImagePaths(ImageFolder):
         image = image[0][None] # only use the first channel
         return image, target
 
-
 class TransferSetImages(Dataset):
     def __init__(self, samples, transform=None, target_transform=None):
         self.samples = samples
@@ -130,10 +129,10 @@ params = {"model_name":"resnet18",
           "num_classes":10,
           "out_root":"/mydata/model-extraction/model-extraction-defense/attack/adversary/models/cifar10/",
           "batch_size":128,
-          "eps":0.01,
+          "eps":0.1,
           "steps":3,
           "phi":3,
-          "epochs":10,
+          "epochs":10, # Budget = (steps+1)**phi*len(transferset)
           "momentum":0,
           "blackbox_dir":'/mydata/model-extraction/model-extraction-defense/attack/victim/models/cifar10/wo_normalization',
           "seedset_dir":"/mydata/model-extraction/model-extraction-defense/attack/adversary/models/cifar10",
@@ -174,7 +173,7 @@ start_epoch = checkpoint['epoch']
 encoder.load_state_dict(checkpoint['state_dict'])
 print("=> loaded checkpoint (epoch {})".format(checkpoint['epoch']))
 
-#encoder = encoder.to(device)
+encoder = encoder.to(device)
 
 detector = Detector(k, thresh, encoder, log_suffix=log_suffix, log_dir=log_dir)
 blackbox_dir = params["blackbox_dir"]

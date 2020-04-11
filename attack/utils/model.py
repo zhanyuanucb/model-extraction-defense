@@ -212,11 +212,16 @@ def train_model(model, trainset, out_path, batch_size=64, criterion_train=None, 
 
     # Initialize logging
     log_path = osp.join(out_path, 'train.{}.log.tsv'.format(checkpoint_suffix))
-    if osp.exists(log_path): # Remove previous log
-        os.remove(log_path)
-    with open(log_path, 'w') as wf:
-        columns = ['run_id', 'epoch', 'split', 'loss', 'accuracy', 'best_accuracy']
-        wf.write('\t'.join(columns) + '\n')
+    #if osp.exists(log_path): # Remove previous log
+    #    os.remove(log_path)
+    #with open(log_path, 'w') as wf:
+    #    columns = ['run_id', 'epoch', 'split', 'loss', 'accuracy', 'best_accuracy']
+    #    wf.write('\t'.join(columns) + '\n')
+    
+    if not osp.exists(log_path): # Remove previous log
+        with open(log_path, 'w') as wf:
+            columns = ['run_id', 'epoch', 'split', 'loss', 'accuracy', 'best_accuracy']
+            wf.write('\t'.join(columns) + '\n')
     
     model_out_path = osp.join(out_path, 'checkpoint.{}.pth.tar'.format(checkpoint_suffix))
     for epoch in range(start_epoch, epochs + 1):
