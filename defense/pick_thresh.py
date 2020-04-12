@@ -12,6 +12,7 @@ import sys
 sys.path.append('/mydata/model-extraction/model-extraction-defense/')
 
 import numpy as np
+import sklearn.metrics.pairwise as pairwise
 import random
 import matplotlib.pyplot as plt
 
@@ -133,8 +134,6 @@ def main():
     args = parser.parse_args()
     params = vars(args)
 
-    
-
     #torch.manual_seed(cfg.DEFAULT_SEED)
     if params['device_id'] >= 0:
         os.environ["CUDA_VISIBLE_DEVICES"] = str(params['device_id'])
@@ -148,8 +147,7 @@ def main():
     if dataset_name not in valid_datasets:
         raise ValueError('Dataset not found. Valid arguments = {}'.format(valid_datasets))
     modelfamily = datasets.dataset_to_modelfamily[dataset_name]
-    #transform = datasets.modelfamily_to_transforms[modelfamily]['test']
-    transform = tvtransforms.ToTensor()
+    transform = datasets.modelfamily_to_transforms[modelfamily]['test2']
 
     # ---------------- Load dataset
     num_workers = params['nworkers']
@@ -177,12 +175,9 @@ def main():
                 best_nacc = checkpoint['best_nacc']
                 model.load_state_dict(checkpoint['state_dict'])
                 print("=> loaded checkpoint:\n best_pacc: {} \n best_nacc: {}".format(best_pacc, best_nacc))
-                #if callback:
-                    #print(f"Callback: {callback}%")
-                #else:
-                    #print("No callback")
             else:
                 print("=> no checkpoint found at '{}'".format(ckp))
+                exit(1)
 
             K = params['K']
             up_to_K = bool(params["up_to_K"])

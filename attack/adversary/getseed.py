@@ -74,7 +74,6 @@ def main():
     transform = datasets.modelfamily_to_transforms[modelfamily]['test2'] # Note: test2 has no normalization
     seedset = tvdatasets.ImageFolder(seedset_dir, transform=transform)
 
-
     # ----------- Initialize blackbox
     blackbox_dir = params['victim_model_dir']
     blackbox = Blackbox.from_modeldir(blackbox_dir, device)
@@ -82,31 +81,29 @@ def main():
     # ----------- Initialize adversary
     batch_size = params['batch_size']
     nworkers = params['nworkers']
-    seed_out_path = osp.join(out_path, 'seed.pickle')
-    pickle_out_path = osp.join(out_path, 'seed_pickle')
-    adversary = RandomAdversary(blackbox, seedset, out_path=pickle_out_path, batch_size=batch_size)
+    seed_out_path = osp.join(out_path, 'seed.pt')
+    adversary = RandomAdversary(blackbox, seedset, batch_size=batch_size)
 
     print('=> constructing seedset...')
-    transferset = adversary.get_seedset()
+    seedset = adversary.get_seedset()
 
     # ----------- Clean up transfer (top-1 predicted label)
-    new_transferset = []
+    #new_transferset = []
     print('=> Using argmax labels (instead of posterior probabilities)')
-    for i in range(len(transferset)):
-        x_i, y_i = transferset[i]
-        argmax_k = y_i.argmax()
-        y_i_1hot = torch.zeros_like(y_i)
-        y_i_1hot[argmax_k] = 1.
-        new_transferset.append((x_i, y_i_1hot))
-    transferset = new_transferset
+    #for i in range(len(transferset)):
+    #    x_i, y_i = transferset[i]
+    #    argmax_k = y_i.argmax()
+    #    y_i_1hot = torch.zeros_like(y_i)
+    #    y_i_1hot[argmax_k] = 1.
+    #    new_transferset.append((x_i, y_i_1hot))
+    #transferset = new_transferset
 
-    with open(seed_out_path, 'wb') as wf:
-        pickle.dump(transferset, wf)
-    print('=> transfer set ({} samples) written to: {}'.format(len(transferset), seed_out_path))
+    torch.save(seedset, seed_out_path)
+    print('=> transfer set ({} samples) written to: {}'.format(seedset[0].size(0), seed_out_path))
 
     # Store arguments
     params['created_on'] = str(datetime.now())
-    params_out_path = osp.join(out_path, 'params_transfer.json')
+    params_out_path = osp.join(out_path, 'params_seed.json')
     with open(params_out_path, 'w') as jf:
         json.dump(params, jf, indent=True)
 

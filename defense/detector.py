@@ -42,12 +42,14 @@ class Detector:
         self._init_log()
     
     def _process(self, images):
-        queries = self.encoder(images).cpu().numpy()
+        with torch.no_grad():
+            queries = self.encoder(images).cpu().numpy()
         for query in queries:
             self._process_query(query)
 
-    def _process_queries(self, query):
-        if len(self.memory) == 0 and len(self.buffer) < self.K:
+    def _process_query(self, query):
+        k = self.K
+        if len(self.memory) == 0 and len(self.buffer) < k:
             self.buffer.append(query)
             self.query_count += 1
             return False
@@ -56,7 +58,7 @@ class Detector:
 
         if len(self.buffer) > 0:
             queries = np.stack(self.buffer, axis=0)
-            dist = np.linalg.norm(queries - query, axis=-1)
+            dists = np.linalg.norm(queries - query, axis=-1)
             all_dists.append(dists)
         
         for queries in self.memory:
@@ -93,7 +95,7 @@ class Detector:
 
     def _write_log(self, detected_dist):
         with open(self.log_file, 'a') as log:
-            columns = [str(self.query_count), str(self.detection_count), str(self.detection_count)]
+            columns = [str(self.query_count), str(self.detection_count), str(detected_dist)]
             log.write('\t'.join(columns) + '\n')
     
     def __call__(self, images):
