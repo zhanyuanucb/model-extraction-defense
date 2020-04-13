@@ -6,6 +6,7 @@ import argparse
 import os.path as osp
 import os
 import pickle
+from PIL import Image
 import json
 from datetime import datetime
 import sys
@@ -22,6 +23,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
 import torchvision
+from torchvision.datasets import VisionDataset
 import torchvision.datasets as tvdatasets
 from torchvision.datasets.folder import ImageFolder, IMG_EXTENSIONS, default_loader
 from torchvision.transforms import transforms as tvtransforms
@@ -54,32 +56,58 @@ class TransferSetImagePaths(ImageFolder):
         self.target_transform = target_transform
 
 
-class PositiveNegativeSet(ImageFolder):
-    """ Dataset for loading positive samples"""
+#class PositiveNegativeSet(ImageFolder):
+#    """ Dataset for loading positive samples
+#    For images in .png
+#    """
+#
+#    def __init__(self, samples, normal_transform=None, random_transform=None):
+#        assert normal_transform is not None, "PositiveSet: require vanilla normalization!"
+#        assert random_transform is not None, "PositiveSet: require random transformation!"
+#        self.loader = default_loader
+#        self.extensions = IMG_EXTENSIONS
+#        self.samples = samples
+#        self.n_samples = len(self.samples)
+#        self.normal_transform = normal_transform
+#        self.random_transform = random_transform
+#
+#    def __getitem__(self, index):
+#        path = self.samples[index]
+#        sample = self.loader(path)
+#        if self.normal_transform:
+#            original = self.normal_transform(sample)
+#        rand = self.random_transform(sample)
+#        # randomly choose a different image
+#        other_idx = random.choice(list(range(index)) + list(range(index+1, self.n_samples)))
+#        other_path = self.samples[other_idx]
+#        other_sample = self.loader(other_path)
+#        other = self.normal_transform(other_sample)
+#        return original, rand, other
 
-    def __init__(self, samples, normal_transform=None, random_transform=None):
-        assert normal_transform is not None, "PositiveSet: require vanilla normalization!"
-        assert random_transform is not None, "PositiveSet: require random transformation!"
-        self.loader = default_loader
-        self.extensions = IMG_EXTENSIONS
-        self.samples = samples
-        self.n_samples = len(self.samples)
+class PositiveNegativeSet(VisionDataset):
+    """
+    For data in form of serialized tensor
+    """
+    def __init__(self, load_path, normal_transform=None, random_transform=None):
+        self.data, _ = torch.load(load_path)
+        self.n_samples = self.data.size(0)
         self.normal_transform = normal_transform
         self.random_transform = random_transform
 
     def __getitem__(self, index):
-        path = self.samples[index]
-        sample = self.loader(path)
-        if self.normal_transform:
-            original = self.normal_transform(sample)
-        rand = self.random_transform(sample)
-        # randomly choose a different image
+        img = self.data[index]
+        img = Image.fromarray(img.numpy(), mode='L')
+        ori_img = self.normal_transform(img)
+        ran_img = self.random_transform(img)
         other_idx = random.choice(list(range(index)) + list(range(index+1, self.n_samples)))
-        other_path = self.samples[other_idx]
-        other_sample = self.loader(other_path)
-        other = self.normal_transform(other_sample)
-        return original, rand, other
-    
+        img2 = self.data[other_idx]
+        img2 = Image.fromarray(img2.numpy(), mode='L')
+        other_img = self.normal_transform(img2)
+        return ori_img, ran_img, other_img
+
+    def __len__(self):
+        return self.n_samples
+
 
 def get_optimizer(parameters, optimizer_type, lr=0.01, momentum=0.5, **kwargs):
     assert optimizer_type in ['sgd', 'sgdm', 'adam', 'adagrad']
@@ -199,16 +227,18 @@ def main():
     # -----------------------------------------------------
     
     # Build dataset for Positive/Negative samples
-    train_dir = osp.join(cfg.DATASET_ROOT, 'cifar10/train')
-    test_dir = osp.join(cfg.DATASET_ROOT, 'cifar10/test')
-    train_folder = ImageFolder(train_dir)
-    test_folder = ImageFolder(test_dir)
-    train_pathset = get_pathset(train_folder)
-    val_pathset = get_pathset(test_folder)
+    train_dir = osp.join(cfg.DATASET_ROOT, 'mnist/MNIST/processed/training.pt')
+    test_dir = osp.join(cfg.DATASET_ROOT, 'mnist/MNIST/processed/test.pt')
+    #train_folder = ImageFolder(train_dir)
+    #test_folder = ImageFolder(test_dir)
+    #train_pathset = get_pathset(train_folder)
+    #val_pathset = get_pathset(test_folder)
 
     # ----------------- Similarity training
-    sim_trainset = PositiveNegativeSet(train_pathset, normal_transform=test_transform, random_transform=random_transform)
-    sim_valset = PositiveNegativeSet(val_pathset, normal_transform=test_transform, random_transform=random_transform)
+    #sim_trainset = PositiveNegativeSet(train_pathset, normal_transform=test_transform, random_transform=random_transform)
+    #sim_valset = PositiveNegativeSet(val_pathset, normal_transform=test_transform, random_transform=random_transform)
+    sim_trainset = PositiveNegativeSet(train_dir, normal_transform=test_transform, random_transform=random_transform)
+    sim_valset = PositiveNegativeSet(test_dir, normal_transform=test_transform, random_transform=random_transform)
     # Replace the last layer
     model.last_linear = IdLayer().to(device)
     #if gpu_count > 1:
@@ -219,7 +249,7 @@ def main():
     margin_test = margin_train
     sim_epochs = params['sim_epochs']
     checkpoint_suffix = ".sim-{:.1f}".format(margin_test)
-    out_path = osp.join(out_path, "margin-{:.1f}".format(margin_test))
+    out_path = osp.join(out_path, "{}-margin-{:.1f}".format(dataset_name, margin_test))
     if not osp.exists(out_path):
         os.mkdir(out_path)
     encoder_utils.train_model(model, sim_trainset, out_path, epochs=sim_epochs, testset=sim_valset,

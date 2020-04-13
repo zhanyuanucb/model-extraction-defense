@@ -46,6 +46,8 @@ class RandomTransforms:
             #self.normalize = transforms.Normalize(mean=cfg.IMAGENET_MEAN,
             #                                 std=cfg.IMAGENET_STD)
             self.size = 224
+        elif modelfamily == "mnist":
+            self.size = 28
         else:
             raise ValueError
 
@@ -55,7 +57,17 @@ class RandomTransforms:
                            transforms.RandomResizedCrop(self.size, scale=(1-0.04, 1.0), ratio=(1, 1)), # Crop and Resize, r=0.04, also resize from 3/4 to 4/3 (by default)
                            transforms.ColorJitter(brightness=0.09), # Brightness, r=0.09
                            transforms.ColorJitter(contrast=0.55) # Contrast, r=0.55
+                           ] if modelfamily != "mnist" else [
+                           transforms.RandomRotation(0.018, fill=(0,)), # Rotation r=0.018
+                           transforms.RandomAffine(0, translate=(0.45, 0.45), resample=PIL.Image.BILINEAR, fillcolor=(0,)), # Translate, r=0.45
+                           transforms.RandomAffine(0, scale=(1-0.17, 1+0.17), fillcolor=(0,)), # Pixel-wise Scale, r=0.17
+                           transforms.RandomResizedCrop(self.size, scale=(1-0.04, 1.0), ratio=(1, 1)), # Crop and Resize, r=0.04, also resize from 3/4 to 4/3 (by default)
+                           transforms.ColorJitter(brightness=0.09), # Brightness, r=0.09
+                           transforms.ColorJitter(contrast=0.55) # Contrast, r=0.55
                            ]
+
+        self.noise_weight = 0.25 #if modelfamily != "mnist" else 1/3
+        self.affine_weight = 1 - self.noise_weight
                 
         self.noise = transforms.RandomChoice([transforms.Lambda(lambda x: x + torch.randn_like(x).to(x.device) * 0.095),
                                               transforms.Lambda(lambda x: x + 0.128*torch.rand_like(x).to(x.device) - 0.064)]) 
@@ -70,5 +82,5 @@ class RandomTransforms:
 
 
     def __call__(self, x):
-        t = random.choice([self.noise_transform, self.affinecolor_transform], p=[0.25, 0.75])
+        t = random.choice([self.noise_transform, self.affinecolor_transform], p=[self.noise_weight, self.affine_weight])
         return t(x)
