@@ -122,15 +122,15 @@ def get_optimizer(parameters, optimizer_type, lr=0.01, momentum=0.5, **kwargs):
         raise ValueError('Unrecognized optimizer type')
     return optimizer
 
-params = {"model_name":"resnet18",
+params = {"model_name":"resnet34",
           "modelfamily":"cifar",
           "num_classes":10,
           "out_root":"/mydata/model-extraction/model-extraction-defense/attack/adversary/models/cifar10/",
           "batch_size":128,
-          "eps":0.1,
-          "steps":1,
-          "phi":9,
-          "alt_t": 3, # Alternate period of step size sign
+          "eps":0.01,
+          "steps":2,
+          "phi":4,
+          "alt_t": None, # Alternate period of step size sign
           "epochs":10, # Budget = (steps+1)**phi*len(transferset)
           "momentum":0,
           "blackbox_dir":'/mydata/model-extraction/model-extraction-defense/attack/victim/models/cifar10/wo_normalization',
@@ -140,7 +140,7 @@ params = {"model_name":"resnet18",
           "encoder_ckp":"/mydata/model-extraction/model-extraction-defense/defense/similarity_encoding/margin-3.2",
           "encoder_margin":3.2,
           "k":200,
-          "thresh":0.334,
+          "thresh":0.17242,
           "log_suffix":"testing",
           "log_dir":"./"}
 
@@ -153,6 +153,8 @@ else:
     print(device)
 gpu_count = torch.cuda.device_count()
 
+params['created_on'] = str(datetime.now()).replace(' ', '_')[:19]
+created_on = params['created_on']
 # ----------- Initialize detector
 k = params["k"]
 thresh = params["thresh"]
@@ -176,7 +178,7 @@ encoder = encoder.to(device)
 
 detector = Detector(k, thresh, encoder, log_suffix=log_suffix, log_dir=log_dir)
 blackbox_dir = params["blackbox_dir"]
-detector.init(blackbox_dir, device)
+detector.init(blackbox_dir, device, time=created_on)
 
 # ----------- Initialize adversary model
 model_name = params["model_name"]
@@ -190,6 +192,10 @@ model = model.to(device)
 # ----------- Initialize adversary
 nworkers = 10
 out_root = params["out_root"]
+
+ckp_out_root = osp.join(out_root, created_on)
+if not osp.exists(ckp_out_root):
+    os.mkdir(ckp_out_root)
 #substitute_out_root = osp.join(out_path, 'substituteset.pickle')
 batch_size = params["batch_size"]
 eps = params["eps"]
@@ -197,7 +203,7 @@ steps= params["steps"]
 momentum= params["momentum"]
 adversary = JDAAdversary(model, detector, eps=eps, batch_size=batch_size, steps=steps, momentum=momentum)
 
-# ----------- Set up transferset
+# ----------- Set up seedset
 seedset_path = osp.join(params["seedset_dir"], 'seed.pt')
 images_sub, labels_sub = torch.load(seedset_path)
 seedset_samples = [images_sub, labels_sub]
@@ -208,7 +214,7 @@ print('=> found transfer set with {} samples, {} classes'.format(seedset_samples
 testset_name = params["testset_name"]
 valid_datasets = datasets.__dict__.keys()
 modelfamily = datasets.dataset_to_modelfamily[testset_name]
-transform = datasets.modelfamily_to_transforms[modelfamily]['test2'] # test2 has no normalization
+transform = datasets.modelfamily_to_transforms[modelfamily]['test'] # test2 has no normalization
 if testset_name not in valid_datasets:
     raise ValueError('Dataset not found. Valid arguments = {}'.format(valid_datasets))
 dataset = datasets.__dict__[testset_name]
@@ -240,7 +246,8 @@ epochs = params["epochs"]
 num_workers = 10
 train_loader = DataLoader(substitute_set, batch_size=batch_size, shuffle=True, num_workers=num_workers)
 for p in range(phi):
-    adversary.JDA.lam *= (-1)**(p/alt_t)
+    if alt_t: # Apply periodic step size
+        adversary.JDA.lam *= (-1)**(p//alt_t)
     #substitute_out_dir = osp.join(out_root, f"round-{p}")
     #if not osp.exists(substitute_out_dir):
     #    os.mkdir(substitute_out_dir)
@@ -255,12 +262,11 @@ for p in range(phi):
     substitute_set = ImageTensorSet(substitute_samples)
     print(f"Substitute training epoch {p}")
     print(f"Current size of the substitute set {len(substitute_set)}")
-    _, train_loader = model_utils.train_model(model, substitute_set, out_root, epochs=epochs, testset=testloader, criterion_train=criterion_train,
+    _, train_loader = model_utils.train_model(model, substitute_set, ckp_out_root, epochs=epochs, testset=testloader, criterion_train=criterion_train,
                                               checkpoint_suffix=checkpoint_suffix, device=device, optimizer=optimizer)
                             
 # Store arguments
 params['budget'] = budget
-params['created_on'] = str(datetime.now())
-params_out_path = osp.join(out_root, 'params_train.json')
+params_out_path = osp.join(ckp_out_root, 'params_train.json')
 with open(params_out_path, 'w') as jf:
     json.dump(params, jf, indent=True)

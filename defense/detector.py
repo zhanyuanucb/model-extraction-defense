@@ -37,9 +37,9 @@ class Detector:
         self.memory = []
         self.log_file = osp.join(log_dir, f"detector.{log_suffix}.log.tsv")
     
-    def init(self, blackbox_dir, device):
+    def init(self, blackbox_dir, device, time=None):
         self.blackbox = Blackbox.from_modeldir(blackbox_dir, device)
-        self._init_log()
+        self._init_log(time)
     
     def _process(self, images):
         with torch.no_grad():
@@ -86,9 +86,11 @@ class Detector:
         self.buffer = []
         self.memory = []
 
-    def _init_log(self):
+    def _init_log(self, time):
         if not osp.exists(self.log_file):
             with open(self.log_file, 'w') as log:
+                if time is not None:
+                    log.write(time + '\n')
                 columns = ["Query Count", "Detection Count", "Detected Distance"]
                 log.write('\t'.join(columns) + '\n')
         print(f"Created log file at {self.log_file}")

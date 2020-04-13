@@ -157,11 +157,11 @@ def main():
     if dataset_name not in valid_datasets:
         raise ValueError('Dataset not found. Valid arguments = {}'.format(valid_datasets))
     modelfamily = datasets.dataset_to_modelfamily[dataset_name]
-    #train_transform = datasets.modelfamily_to_transforms[modelfamily]['test']
-    transform = tvtransforms.ToTensor()
+    train_transform = datasets.modelfamily_to_transforms[modelfamily]['train']
+    test_transform = datasets.modelfamily_to_transforms[modelfamily]['test']
     random_transform = transform_utils.RandomTransforms(modelfamily=modelfamily)
-    trainset = datasets.__dict__[dataset_name](train=True, transform=datasets.modelfamily_to_transforms[modelfamily]['train2']) # Augment data while training
-    valset = datasets.__dict__[dataset_name](train=False, transform=transform)
+    trainset = datasets.__dict__[dataset_name](train=True, transform=train_transform) # Augment data while training
+    valset = datasets.__dict__[dataset_name](train=False, transform=test_transform)
 
     model_name = params['model_name']
     num_classes = params['num_classes']
@@ -207,8 +207,8 @@ def main():
     val_pathset = get_pathset(test_folder)
 
     # ----------------- Similarity training
-    sim_trainset = PositiveNegativeSet(train_pathset, normal_transform=transform, random_transform=random_transform)
-    sim_valset = PositiveNegativeSet(val_pathset, normal_transform=transform, random_transform=random_transform)
+    sim_trainset = PositiveNegativeSet(train_pathset, normal_transform=test_transform, random_transform=random_transform)
+    sim_valset = PositiveNegativeSet(val_pathset, normal_transform=test_transform, random_transform=random_transform)
     # Replace the last layer
     model.last_linear = IdLayer().to(device)
     #if gpu_count > 1:
