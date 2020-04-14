@@ -51,8 +51,7 @@ class RandomAdversary(object):
                     self.idx_set = set(range(len(self.queryset)))
 
                 #x_t = torch.stack([self.queryset[i][0][0][None] for i in idxs]).cuda() # Only for MNIST
-                queryset = self.queryset
-                x_t = torch.stack([queryset[i][0] for i in idxs], dim=0)
+                x_t = torch.stack([self.queryset[i][0] for i in idxs], dim=0)
 
                 x_t = x_t.cuda()
                 y_t = self.blackbox(x_t).cpu()

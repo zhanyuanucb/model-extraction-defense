@@ -122,14 +122,14 @@ def get_optimizer(parameters, optimizer_type, lr=0.01, momentum=0.5, **kwargs):
         raise ValueError('Unrecognized optimizer type')
     return optimizer
 
-params = {"model_name":"resnet34",
-          "modelfamily":"cifar",
+params = {"model_name":"pnet",
+          "modelfamily":"mnist",
           "num_classes":10,
           "out_root":"/mydata/model-extraction/model-extraction-defense/attack/adversary/models/mnist/",
           "batch_size":128,
-          "eps":0.01,
-          "steps":2,
-          "phi":4,
+          "eps":0.1,
+          "steps":1,
+          "phi":6,
           "alt_t": None, # Alternate period of step size sign
           "epochs":10, # Budget = (steps+1)**phi*len(transferset)
           "momentum":0,
@@ -137,10 +137,10 @@ params = {"model_name":"resnet34",
           "seedset_dir":"/mydata/model-extraction/model-extraction-defense/attack/adversary/models/mnist",
           "testset_name":"MNIST",
           "optimizer_name":"adam",
-          "encoder_ckp":"/mydata/model-extraction/model-extraction-defense/defense/similarity_encoding/margin-3.2",
+          "encoder_ckp":"/mydata/model-extraction/model-extraction-defense/defense/similarity_encoding/",
           "encoder_margin":3.2,
           "k":200,
-          "thresh":0.17242,
+          "thresh":0.0769,
           "log_suffix":"testing",
           "log_dir":"./"}
 
@@ -164,9 +164,11 @@ modelfamily = params["modelfamily"]
 num_classes = 10
 encoder = zoo.get_net("simnet", modelfamily, num_classes=num_classes)
 
-#             Setup encoder
+# ----------- Setup encoder
+testset_name = params["testset_name"]
 encoder_ckp = params["encoder_ckp"]
 encoder_margin = params["encoder_margin"]
+encoder_ckp = osp.join(encoder_ckp, f"{testset_name}-margin-{encoder_margin}")
 ckp = osp.join(encoder_ckp, f"checkpoint.sim-{encoder_margin}.pth.tar")
 print(f"=> loading encoder checkpoint '{ckp}'")
 checkpoint = torch.load(ckp)
@@ -211,7 +213,6 @@ num_classes = seedset_samples[1][0].size(0)
 print('=> found transfer set with {} samples, {} classes'.format(seedset_samples[0].size(0), num_classes))
 
 # ----------- Set up testset
-testset_name = params["testset_name"]
 valid_datasets = datasets.__dict__.keys()
 modelfamily = datasets.dataset_to_modelfamily[testset_name]
 transform = datasets.modelfamily_to_transforms[modelfamily]['test'] # test2 has no normalization
@@ -219,6 +220,7 @@ if testset_name not in valid_datasets:
     raise ValueError('Dataset not found. Valid arguments = {}'.format(valid_datasets))
 dataset = datasets.__dict__[testset_name]
 testset = dataset(train=False, transform=transform)
+
 if len(testset.classes) != num_classes:
     raise ValueError('# Transfer classes ({}) != # Testset classes ({})'.format(num_classes, len(testset.classes)))
 

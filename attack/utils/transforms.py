@@ -39,14 +39,17 @@ class RandomTransforms:
 
     def __init__(self, modelfamily="cifar"):
         if modelfamily == "cifar":
-            #self.normalize = transforms.Normalize(mean=cfg.CIFAR_MEAN,
-            #                                 std=cfg.CIFAR_STD)
+            self.normalize = transforms.Normalize(mean=cfg.CIFAR_MEAN,
+                                             std=cfg.CIFAR_STD)
             self.size = 32
         elif modelfamily == "imagenet":
-            #self.normalize = transforms.Normalize(mean=cfg.IMAGENET_MEAN,
-            #                                 std=cfg.IMAGENET_STD)
+            self.normalize = transforms.Normalize(mean=cfg.IMAGENET_MEAN,
+                                             std=cfg.IMAGENET_STD)
             self.size = 224
         elif modelfamily == "mnist":
+            self.normalize = transforms.Normalize(mean=cfg.MNIST_MEAN,
+                                             std=cfg.MNIST_STD)
+
             self.size = 28
         else:
             raise ValueError
@@ -66,17 +69,17 @@ class RandomTransforms:
                            transforms.ColorJitter(contrast=0.55) # Contrast, r=0.55
                            ]
 
-        self.noise_weight = 0.25 #if modelfamily != "mnist" else 1/3
+        self.noise_weight = 0.25 
         self.affine_weight = 1 - self.noise_weight
                 
         self.noise = transforms.RandomChoice([transforms.Lambda(lambda x: x + torch.randn_like(x).to(x.device) * 0.095),
                                               transforms.Lambda(lambda x: x + 0.128*torch.rand_like(x).to(x.device) - 0.064)]) 
         self.noise_transform = transforms.Compose([transforms.ToTensor(),
-                                                   #self.normalize,
+                                                   self.normalize,
                                                    self.noise])
         self.affinecolor_transform = transforms.Compose([transforms.RandomChoice(self.candidates),
                                                          transforms.ToTensor(),
-                                                         #self.normalize]
+                                                         self.normalize
                                                         ])
         self.random_transform = transforms.RandomChoice([self.noise_transform, self.affinecolor_transform])
 

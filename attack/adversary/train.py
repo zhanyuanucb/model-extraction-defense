@@ -227,7 +227,7 @@ def train_model(model, trainset, out_path, batch_size=64, criterion_train=None, 
             columns = ['run_id', 'epoch', 'split', 'loss', 'accuracy', 'best_accuracy']
             wf.write('\t'.join(columns) + '\n')
 
-    model_out_path = osp.join(out_path, 'checkpoint{}.pth.tar'.format(checkpoint_suffix))
+    model_out_path = osp.join(out_path, 'checkpoint.{}.pth.tar'.format(checkpoint_suffix))
     for epoch in range(start_epoch, epochs + 1):
         #scheduler.step(epoch) # should call optimizer.step() before scheduler.stop(epoch)
         train_loss, train_acc = train_step(model, train_loader, criterion_train, optimizer, epoch, device,

@@ -88,20 +88,21 @@ class PositiveNegativeSet(VisionDataset):
     """
     For data in form of serialized tensor
     """
-    def __init__(self, load_path, normal_transform=None, random_transform=None):
+    def __init__(self, load_path, normal_transform=None, random_transform=None, dataset="MNIST"):
         self.data, _ = torch.load(load_path)
         self.n_samples = self.data.size(0)
         self.normal_transform = normal_transform
         self.random_transform = random_transform
+        self.mode = "L" if dataset == "MNIST" else "RGB"
 
     def __getitem__(self, index):
-        img = self.data[index]
-        img = Image.fromarray(img.numpy(), mode='L')
+        img_pt = self.data[index]
+        img = Image.fromarray(img_pt.numpy(), mode=self.mode)
         ori_img = self.normal_transform(img)
         ran_img = self.random_transform(img)
         other_idx = random.choice(list(range(index)) + list(range(index+1, self.n_samples)))
-        img2 = self.data[other_idx]
-        img2 = Image.fromarray(img2.numpy(), mode='L')
+        img2_pt = self.data[other_idx]
+        img2 = Image.fromarray(img2_pt.numpy(), mode=self.mode)
         other_img = self.normal_transform(img2)
         return ori_img, ran_img, other_img
 
@@ -206,7 +207,7 @@ def main():
     load_pretrained = params['load_pretrained']
     callback = params['callback']
     if load_pretrained:
-        ckp = osp.join(out_path, f"checkpoint.{checkpoint_suffix}.pth.tar")
+        ckp = osp.join(out_path, f"checkpoint{checkpoint_suffix}.pth.tar")
         if not osp.isfile(ckp):
             print("=> no checkpoint found at '{}' but load_pretrained is {}".format(ckp, load_pretrained))
             exit(1)
@@ -229,16 +230,12 @@ def main():
     # Build dataset for Positive/Negative samples
     train_dir = osp.join(cfg.DATASET_ROOT, 'mnist/MNIST/processed/training.pt')
     test_dir = osp.join(cfg.DATASET_ROOT, 'mnist/MNIST/processed/test.pt')
-    #train_folder = ImageFolder(train_dir)
-    #test_folder = ImageFolder(test_dir)
-    #train_pathset = get_pathset(train_folder)
-    #val_pathset = get_pathset(test_folder)
+    #train_dir = osp.join(cfg.DATASET_ROOT, 'cifar10/training.pt')
+    #test_dir = osp.join(cfg.DATASET_ROOT, 'cifar10/test.pt')
 
     # ----------------- Similarity training
-    #sim_trainset = PositiveNegativeSet(train_pathset, normal_transform=test_transform, random_transform=random_transform)
-    #sim_valset = PositiveNegativeSet(val_pathset, normal_transform=test_transform, random_transform=random_transform)
-    sim_trainset = PositiveNegativeSet(train_dir, normal_transform=test_transform, random_transform=random_transform)
-    sim_valset = PositiveNegativeSet(test_dir, normal_transform=test_transform, random_transform=random_transform)
+    sim_trainset = PositiveNegativeSet(train_dir, normal_transform=test_transform, random_transform=random_transform, dataset=dataset_name)
+    sim_valset = PositiveNegativeSet(test_dir, normal_transform=test_transform, random_transform=random_transform, dataset=dataset_name)
     # Replace the last layer
     model.last_linear = IdLayer().to(device)
     #if gpu_count > 1:

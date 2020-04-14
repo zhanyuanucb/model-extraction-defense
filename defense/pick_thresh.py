@@ -121,7 +121,7 @@ def main():
     parser = argparse.ArgumentParser(description='Train similarity encoder')
     parser.add_argument('--ckp_dir', metavar='PATH', type=str,
                         help='Destination directory to store trained model', default="/mydata/model-extraction/model-extraction-defense/defense/similarity_encoding")
-    parser.add_argument('--dataset_name', metavar='TYPE', type=str, help='Name of adversary\'s dataset (P_A(X))', default='CIFAR10')
+    parser.add_argument('--dataset_name', metavar='TYPE', type=str, help='Name of adversary\'s dataset (P_A(X))', default='MNIST')
     parser.add_argument('--model_name', metavar='TYPE', type=str, help='Model name', default="simnet")
     parser.add_argument('--num_classes', metavar='TYPE', type=int, help='Number of classes', default=10)
     parser.add_argument('--out_dir', metavar='TYPE', type=str, help='Save output to where', default="/mydata/model-extraction/model-extraction-defense/defense/similarity_encoding")
@@ -143,24 +143,26 @@ def main():
 
     # ----------- Set up dataset
     dataset_name = params['dataset_name']
+    dataset = datasets.__dict__[dataset_name]
     valid_datasets = datasets.__dict__.keys()
     if dataset_name not in valid_datasets:
         raise ValueError('Dataset not found. Valid arguments = {}'.format(valid_datasets))
     modelfamily = datasets.dataset_to_modelfamily[dataset_name]
-    transform = datasets.modelfamily_to_transforms[modelfamily]['test2']
+    transform = datasets.modelfamily_to_transforms[modelfamily]['test']
 
     # ---------------- Load dataset
     num_workers = params['nworkers']
-    train_dir = osp.join(cfg.DATASET_ROOT, 'cifar10/train')
-    train_folder = ImageFolder(train_dir)
-    train_pathset = get_pathset(train_folder)
-    trainset = ImageDataGenerator(train_pathset, transform=transform)
-    train_loader = DataLoader(trainset, batch_size=trainset.n_samples, shuffle=True, num_workers=num_workers)
+    trainset = dataset(train=True, transform=transform)
+    #train_dir = osp.join(cfg.DATASET_ROOT, modelfamily, 'MNIST/processed/train')
+    #train_folder = ImageFolder(train_dir)
+    #train_pathset = get_pathset(train_folder)
+    #trainset = ImageDataGenerator(train_pathset, transform=transform)
+    train_loader = DataLoader(trainset, batch_size=len(trainset), shuffle=True, num_workers=num_workers)
 
     # ---------------- Calculate thresholds for each encoder
-    for train_data in train_loader:
-        for margin in [31.6, 10.0, 3.2]:
-            encoder_name = f"margin-{margin}"
+    for train_data, _ in train_loader:
+        for margin in [1.0, 3.2]:
+            encoder_name = f"{dataset_name}-margin-{margin}"
             # ----------- Load Encoder
             model_name = params['model_name']
             num_classes = params['num_classes']
