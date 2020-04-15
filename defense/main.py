@@ -122,25 +122,25 @@ def get_optimizer(parameters, optimizer_type, lr=0.01, momentum=0.5, **kwargs):
         raise ValueError('Unrecognized optimizer type')
     return optimizer
 
-params = {"model_name":"pnet",
-          "modelfamily":"mnist",
+## means need to change for different dataset
+params = {"model_name":"pnet", ##
           "num_classes":10,
-          "out_root":"/mydata/model-extraction/model-extraction-defense/attack/adversary/models/mnist/",
+          "out_root":"/mydata/model-extraction/model-extraction-defense/attack/adversary/models/mnist/", ##
           "batch_size":128,
           "eps":0.1,
           "steps":1,
-          "phi":6,
+          "phi":6, # Budget = (steps+1)**phi*len(transferset)
           "alt_t": None, # Alternate period of step size sign
-          "epochs":10, # Budget = (steps+1)**phi*len(transferset)
+          "epochs":10, 
           "momentum":0,
-          "blackbox_dir":'/mydata/model-extraction/model-extraction-defense/attack/victim/models/mnist/pnet',
-          "seedset_dir":"/mydata/model-extraction/model-extraction-defense/attack/adversary/models/mnist",
-          "testset_name":"MNIST",
+          "blackbox_dir":'/mydata/model-extraction/model-extraction-defense/attack/victim/models/mnist/pnet', ##
+          "seedset_dir":"/mydata/model-extraction/model-extraction-defense/attack/adversary/models/mnist", ##
+          "testset_name":"MNIST", ##
           "optimizer_name":"adam",
           "encoder_ckp":"/mydata/model-extraction/model-extraction-defense/defense/similarity_encoding/",
           "encoder_margin":3.2,
           "k":200,
-          "thresh":0.0769,
+          "thresh":0.1, ##
           "log_suffix":"testing",
           "log_dir":"./"}
 
@@ -160,12 +160,12 @@ k = params["k"]
 thresh = params["thresh"]
 log_suffix = params["log_suffix"]
 log_dir = params["log_dir"]
-modelfamily = params["modelfamily"]
+testset_name = params["testset_name"]
+modelfamily = datasets.dataset_to_modelfamily[testset_name]
 num_classes = 10
 encoder = zoo.get_net("simnet", modelfamily, num_classes=num_classes)
 
 # ----------- Setup encoder
-testset_name = params["testset_name"]
 encoder_ckp = params["encoder_ckp"]
 encoder_margin = params["encoder_margin"]
 encoder_ckp = osp.join(encoder_ckp, f"{testset_name}-margin-{encoder_margin}")
@@ -214,7 +214,6 @@ print('=> found transfer set with {} samples, {} classes'.format(seedset_samples
 
 # ----------- Set up testset
 valid_datasets = datasets.__dict__.keys()
-modelfamily = datasets.dataset_to_modelfamily[testset_name]
 transform = datasets.modelfamily_to_transforms[modelfamily]['test'] # test2 has no normalization
 if testset_name not in valid_datasets:
     raise ValueError('Dataset not found. Valid arguments = {}'.format(valid_datasets))
