@@ -73,7 +73,7 @@ def main():
     modelfamily = datasets.dataset_to_modelfamily[seedset_name]
     transform = datasets.modelfamily_to_transforms[modelfamily]['test'] 
     seedset_folder = tvdatasets.ImageFolder(seedset_dir, transform=transform)
-    seedset_loader = DataLoader(seedset_folder, batch_size=128, shuffle=True, num_workers=num_workers)
+    seedset_loader = DataLoader(seedset_folder, batch_size=128, shuffle=True, num_workers=10)
 
     # ----------- Initialize blackbox
     blackbox_dir = params['victim_model_dir']
@@ -83,7 +83,7 @@ def main():
     batch_size = params['batch_size']
     nworkers = params['nworkers']
     seed_out_path = osp.join(out_path, 'seed.pt')
-    adversary = RandomAdversary(blackbox, seedset_loader, batch_size=batch_size)
+    adversary = RandomAdversary(blackbox, seedset_loader)
 
     print('=> constructing seedset...')
     seedset = adversary.get_seedset()
@@ -100,7 +100,7 @@ def main():
     #transferset = new_transferset
 
     torch.save(seedset, seed_out_path)
-    print('=> transfer set ({} samples) written to: {}'.format(seedset[0].size(0), seed_out_path))
+    print('=> Seedset ({} samples) written to: {}'.format(seedset[0].size(0), seed_out_path))
 
     # Store arguments
     params['created_on'] = str(datetime.now())

@@ -112,9 +112,9 @@ def get_optimizer(parameters, optimizer_type, lr=0.01, momentum=0.5, **kwargs):
     return optimizer
 
 ## means need to change for different dataset
-params = {"model_name":"pnet", ##
+params = {"model_name":"resnet18", ##
           "num_classes":10,
-          "out_root":"/mydata/model-extraction/model-extraction-defense/attack/adversary/models/mnist/", ##
+          "out_root":"/mydata/model-extraction/model-extraction-defense/attack/adversary/models/cifar10/", ##
           "batch_size":128,
           "eps":0.1,
           "steps":1,
@@ -122,14 +122,14 @@ params = {"model_name":"pnet", ##
           "alt_t": None, # Alternate period of step size sign
           "epochs":10, 
           "momentum":0,
-          "blackbox_dir":'/mydata/model-extraction/model-extraction-defense/attack/victim/models/mnist/pnet', ##
-          "seedset_dir":"/mydata/model-extraction/model-extraction-defense/attack/adversary/models/mnist", ##
-          "testset_name":"MNIST", ##
+          "blackbox_dir":'/mydata/model-extraction/model-extraction-defense/attack/victim/models/cifar10/resnet18', ##
+          "seedset_dir":"/mydata/model-extraction/model-extraction-defense/attack/adversary/models/cifar10", ##
+          "testset_name":"CIFAR10", ##
           "optimizer_name":"adam",
           "encoder_ckp":"/mydata/model-extraction/model-extraction-defense/defense/similarity_encoding/",
           "encoder_margin":3.2,
-          "k":200,
-          "thresh":0.1, ##
+          "k":50,
+          "thresh":0.0363, ##
           "log_suffix":"testing",
           "log_dir":"./"}
 
@@ -188,11 +188,10 @@ ckp_out_root = osp.join(out_root, created_on)
 if not osp.exists(ckp_out_root):
     os.mkdir(ckp_out_root)
 #substitute_out_root = osp.join(out_path, 'substituteset.pickle')
-batch_size = params["batch_size"]
 eps = params["eps"]
 steps= params["steps"]
 momentum= params["momentum"]
-adversary = JDAAdversary(model, detector, eps=eps, batch_size=batch_size, steps=steps, momentum=momentum)
+adversary = JDAAdversary(model, detector, eps=eps, steps=steps, momentum=momentum)
 
 # ----------- Set up seedset
 seedset_path = osp.join(params["seedset_dir"], 'seed.pt')
@@ -229,6 +228,7 @@ criterion_train = model_utils.soft_cross_entropy
 phi = params["phi"]
 alt_t = params["alt_t"]
 steps = params["steps"]
+batch_size = params["batch_size"]
 budget = (steps+1)**phi*len(substitute_set)
 checkpoint_suffix = 'budget{}'.format(budget)
 testloader = testset
