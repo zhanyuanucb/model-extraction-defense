@@ -55,35 +55,6 @@ class TransferSetImagePaths(ImageFolder):
         self.transform = transform
         self.target_transform = target_transform
 
-
-#class PositiveNegativeSet(ImageFolder):
-#    """ Dataset for loading positive samples
-#    For images in .png
-#    """
-#
-#    def __init__(self, samples, normal_transform=None, random_transform=None):
-#        assert normal_transform is not None, "PositiveSet: require vanilla normalization!"
-#        assert random_transform is not None, "PositiveSet: require random transformation!"
-#        self.loader = default_loader
-#        self.extensions = IMG_EXTENSIONS
-#        self.samples = samples
-#        self.n_samples = len(self.samples)
-#        self.normal_transform = normal_transform
-#        self.random_transform = random_transform
-#
-#    def __getitem__(self, index):
-#        path = self.samples[index]
-#        sample = self.loader(path)
-#        if self.normal_transform:
-#            original = self.normal_transform(sample)
-#        rand = self.random_transform(sample)
-#        # randomly choose a different image
-#        other_idx = random.choice(list(range(index)) + list(range(index+1, self.n_samples)))
-#        other_path = self.samples[other_idx]
-#        other_sample = self.loader(other_path)
-#        other = self.normal_transform(other_sample)
-#        return original, rand, other
-
 class PositiveNegativeSet(VisionDataset):
     """
     For data in form of serialized tensor
@@ -228,10 +199,8 @@ def main():
     # -----------------------------------------------------
     
     # Build dataset for Positive/Negative samples
-    train_dir = osp.join(cfg.DATASET_ROOT, 'mnist/MNIST/processed/training.pt')
-    test_dir = osp.join(cfg.DATASET_ROOT, 'mnist/MNIST/processed/test.pt')
-    #train_dir = osp.join(cfg.DATASET_ROOT, 'cifar10/training.pt')
-    #test_dir = osp.join(cfg.DATASET_ROOT, 'cifar10/test.pt')
+    train_dir = cfg.dataset2dir[dataset_name]["train"]
+    test_dir = cfg.dataset2dir[dataset_name]["test"]
 
     # ----------------- Similarity training
     sim_trainset = PositiveNegativeSet(train_dir, normal_transform=test_transform, random_transform=random_transform, dataset=dataset_name)

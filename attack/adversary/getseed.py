@@ -71,8 +71,9 @@ def main():
     if seedset_name not in valid_datasets:
         raise ValueError('Dataset not found. Valid arguments = {}'.format(valid_datasets))
     modelfamily = datasets.dataset_to_modelfamily[seedset_name]
-    transform = datasets.modelfamily_to_transforms[modelfamily]['test'] # Note: test2 has no normalization
-    seedset = tvdatasets.ImageFolder(seedset_dir, transform=transform)
+    transform = datasets.modelfamily_to_transforms[modelfamily]['test'] 
+    seedset_folder = tvdatasets.ImageFolder(seedset_dir, transform=transform)
+    seedset_loader = DataLoader(seedset_folder, batch_size=128, shuffle=True, num_workers=num_workers)
 
     # ----------- Initialize blackbox
     blackbox_dir = params['victim_model_dir']
@@ -82,7 +83,7 @@ def main():
     batch_size = params['batch_size']
     nworkers = params['nworkers']
     seed_out_path = osp.join(out_path, 'seed.pt')
-    adversary = RandomAdversary(blackbox, seedset, batch_size=batch_size)
+    adversary = RandomAdversary(blackbox, seedset_loader, batch_size=batch_size)
 
     print('=> constructing seedset...')
     seedset = adversary.get_seedset()

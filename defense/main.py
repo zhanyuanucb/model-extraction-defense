@@ -87,22 +87,11 @@ class ImageTensorSet(Dataset):
     Data are saved as:
     List[data:torch.Tensor(), labels:torch.Tensor()]
     """
-    def __init__(self, samples, transform=None, target_transform=None):
-        #self.samples = samples
-        self.transform = transform
-        self.target_transform = target_transform
-
+    def __init__(self, samples):
         self.data, self.targets = samples
 
     def __getitem__(self, index):
         img, target = self.data[index], self.targets[index]
-
-        #if self.transform is not None:
-        #    img = self.transform(img)
-
-        #if self.target_transform is not None:
-        #    target = self.target_transform(target)
-
         return img, target
 
     def __len__(self):
@@ -214,11 +203,11 @@ print('=> found transfer set with {} samples, {} classes'.format(seedset_samples
 
 # ----------- Set up testset
 valid_datasets = datasets.__dict__.keys()
-transform = datasets.modelfamily_to_transforms[modelfamily]['test'] # test2 has no normalization
+test_transform = datasets.modelfamily_to_transforms[modelfamily]['test'] # test2 has no normalization
 if testset_name not in valid_datasets:
     raise ValueError('Dataset not found. Valid arguments = {}'.format(valid_datasets))
 dataset = datasets.__dict__[testset_name]
-testset = dataset(train=False, transform=transform)
+testset = dataset(train=False, transform=test_transform)
 
 if len(testset.classes) != num_classes:
     raise ValueError('# Transfer classes ({}) != # Testset classes ({})'.format(num_classes, len(testset.classes)))
@@ -246,16 +235,13 @@ testloader = testset
 epochs = params["epochs"]
 num_workers = 10
 train_loader = DataLoader(substitute_set, batch_size=batch_size, shuffle=True, num_workers=num_workers)
+substitute_out_path = osp.join(out_root, f"substitute_set.pt")
 for p in range(phi):
     if alt_t: # Apply periodic step size
         adversary.JDA.lam *= (-1)**(p//alt_t)
-    #substitute_out_dir = osp.join(out_root, f"round-{p}")
-    #if not osp.exists(substitute_out_dir):
-    #    os.mkdir(substitute_out_dir)
     images_aug, labels_aug = adversary.JDA(train_loader)
     images_sub = torch.cat([images_sub, images_aug])
     labels_sub = torch.cat([labels_sub, labels_aug])
-    substitute_out_path = osp.join(out_root, f"substitute_set.pt")
     substitute_samples = [images_sub, labels_sub]
     torch.save(substitute_samples, substitute_out_path)
     print('=> substitute set ({} samples) written to: {}'.format(substitute_samples[0].size(0), substitute_out_path))

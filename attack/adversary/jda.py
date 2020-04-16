@@ -11,7 +11,7 @@ device = torch.device("cuda:0" if use_cuda else "cpu")
 #MEAN = np.array([0.485, 0.456, 0.406]).reshape((3, 1, 1))
 #STD = np.array([[0.229, 0.224, 0.225]]).reshape((3, 1, 1))
 class MultiStepJDA:
-    def __init__(self, adversary_model, blackbox, criterion=model_utils.soft_cross_entropy, eps=0.1, batchsize=64, input_shape=[3, 224, 224], steps=1, momentum=0):
+    def __init__(self, adversary_model, blackbox, criterion=model_utils.soft_cross_entropy, eps=0.1, steps=1, momentum=0):
         self.adversary_model = adversary_model
         self.blackbox = blackbox
         self.criterion = criterion

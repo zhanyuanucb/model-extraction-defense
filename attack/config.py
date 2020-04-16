@@ -12,6 +12,12 @@ PROJECT_ROOT = dirname(SRC_ROOT)
 CACHE_ROOT = osp.join(SRC_ROOT, 'cache')
 #DATASET_ROOT = osp.join(PROJECT_ROOT, 'data')
 DATASET_ROOT = "/data"
+CIFAR10_DATASET_TRAIN = osp.join(DATASET_ROOT, 'cifar10/training.pt')
+dataset2dir = {"CIFAR10": {"train":osp.join(DATASET_ROOT, 'cifar10/training.pt'),
+                               "test":osp.join(DATASET_ROOT, 'cifar10/test.pt')},
+                    "MNIST": {"train":osp.join(DATASET_ROOT, 'mnist/MNIST/processed/training.pt'),
+                              "test":osp.join(DATASET_ROOT, 'mnist/MNIST/processed/test.pt')}
+                  }
 DEBUG_ROOT = osp.join(PROJECT_ROOT, 'debug')
 MODEL_DIR = osp.join(PROJECT_ROOT, 'models')
 

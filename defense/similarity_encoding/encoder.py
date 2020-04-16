@@ -199,7 +199,6 @@ def train_model(model, trainset, out_path, batch_size=64, margin_train=np.sqrt(1
     best_train_pacc, best_train_nacc, train_pacc, train_nacc = -1., -1., -1., -1.
     best_test_pacc, best_test_nacc, test_pacc, test_nacc, best_test_loss, test_loss,  = -1., -1., -1., -1., -float('inf'), -float('inf')
 
-
     # Resume if required
     if resume is not None:
         model_path = resume
