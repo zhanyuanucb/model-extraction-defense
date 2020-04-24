@@ -121,7 +121,7 @@ def main():
     parser.add_argument('--num_classes', metavar='TYPE', type=int, help='Number of classes', default=10)
     parser.add_argument('--out_dir', metavar='TYPE', type=str, help='Save output to where', default="/mydata/model-extraction/model-extraction-defense/defense/similarity_encoding")
     parser.add_argument('--K', metavar='TYPE', type=int, help="K nearest neighbors", default=1000)
-    parser.add_argument('--up_to_K', metavar='TYPE', type=int, help="Calculate threshold up to K", default=1)
+    parser.add_argument('--up_to_K', action="store_true")
 
     # ----------- Other params
     parser.add_argument('-d', '--device_id', metavar='D', type=int, help='Device id', default=0)
@@ -177,7 +177,7 @@ def main():
                 exit(1)
 
             K = params['K']
-            up_to_K = bool(params["up_to_K"])
+            up_to_K = params["up_to_K"]
             ks, thresholds = calculate_thresholds(train_data, K=K, encoder=model, up_to_K=up_to_K)
 
             out_dir = params['out_dir']

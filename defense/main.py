@@ -118,19 +118,20 @@ params = {"model_name":"resnet34", ##
           "batch_size":128,
           "eps":0.01,
           "steps":1,
-          "phi":6, # Budget = (steps+1)**phi*len(transferset)
+          "phi":4, # Budget = (steps+1)**phi*len(transferset)
           "alt_t": None, # Alternate period of step size sign
-          "epochs":50, 
+          "epochs":30, 
           "momentum":0,
           "blackbox_dir":'/mydata/model-extraction/model-extraction-defense/attack/victim/models/cifar10/wrn28', ##
           "seedset_dir":"/mydata/model-extraction/model-extraction-defense/attack/adversary/models/cifar10", ##
           "testset_name":"CIFAR10", ##
           "optimizer_name":"adam",
-          "use_detector": False,
+          "use_detector": True,
+          "encoder_arch_name": "wrn28",
           "encoder_ckp":"/mydata/model-extraction/model-extraction-defense/defense/similarity_encoding/",
           "encoder_margin":3.2,
-          "k":50,
-          "thresh":0.0363, ##
+          "k":200,
+          "thresh":1.1644, ##
           "log_suffix":"testing",
           "log_dir":"./"}
 
@@ -151,9 +152,10 @@ thresh = params["thresh"]
 log_suffix = params["log_suffix"]
 log_dir = params["log_dir"]
 testset_name = params["testset_name"]
+encoder_arch_name = params["encoder_arch_name"]
 modelfamily = datasets.dataset_to_modelfamily[testset_name]
 num_classes = 10
-encoder = zoo.get_net("simnet", modelfamily, num_classes=num_classes)
+encoder = zoo.get_net(encoder_arch_name, modelfamily, num_classes=num_classes)
 
 # ----------- Setup encoder
 blackbox_dir = params["blackbox_dir"]
@@ -195,8 +197,8 @@ if not osp.exists(ckp_out_root):
 eps = params["eps"]
 steps= params["steps"]
 momentum= params["momentum"]
-adversary = JDAAdversary(model, blackbox, eps=eps, steps=steps, momentum=momentum)
-
+MEAN, STD = cfg.NORMAL_PARAMS[modelfamily]
+adversary = JDAAdversary(model, blackbox, MEAN, STD, eps=eps, steps=steps, momentum=momentum) 
 # ----------- Set up seedset
 seedset_path = osp.join(params["seedset_dir"], 'seed.pt')
 images_sub, labels_sub = torch.load(seedset_path)
@@ -238,12 +240,14 @@ checkpoint_suffix = 'budget{}'.format(budget)
 testloader = testset
 epochs = params["epochs"]
 num_workers = 10
+adv_confs = []
 train_loader = DataLoader(substitute_set, batch_size=batch_size, shuffle=True, num_workers=num_workers)
 substitute_out_path = osp.join(out_root, f"substitute_set.pt")
 for p in range(phi):
     if alt_t: # Apply periodic step size
         adversary.JDA.lam *= (-1)**(p//alt_t)
-    images_aug, labels_aug = adversary.JDA(train_loader)
+    images_aug, labels_aug, is_advs, confs = adversary.JDA(train_loader)
+    adv_confs.extend([confs[i] for i in range(confs.shape[0]) if is_advs[i]])
     images_sub = torch.cat([images_sub, images_aug])
     labels_sub = torch.cat([labels_sub, labels_aug])
     substitute_samples = [images_sub, labels_sub]
@@ -261,3 +265,8 @@ params['budget'] = budget
 params_out_path = osp.join(ckp_out_root, 'params_train.json')
 with open(params_out_path, 'w') as jf:
     json.dump(params, jf, indent=True)
+
+# Inspect
+confs_path = osp.join(ckp_out_root, 'adv_confs.np')
+with open(confs_path, 'wb') as file:
+    pickle.dump(adv_confs, confs_path)

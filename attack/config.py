@@ -32,3 +32,7 @@ CIFAR_STD = [0.2023, 0.1994, 0.2010]
 MNIST_MEAN = (0.1307,) 
 MNIST_STD = (0.3081,)
 DEFAULT_BATCH_SIZE = 64
+
+NORMAL_PARAMS = {"cifar": (CIFAR_MEAN, CIFAR_STD),
+                 "imagenet": (IMAGENET_MEAN, IMAGENET_STD),
+                 "mnist": (MNIST_MEAN, MNIST_STD)}

@@ -1,0 +1,1 @@
+CUDA_VISIBLE_DEVICES=1 python pick_thresh.py --dataset_name=CIFAR10 --model_name=wrn28 --up_to_K

@@ -42,10 +42,13 @@ class Detector:
         self._init_log(time)
     
     def _process(self, images):
+        is_adv = [0 for _ in range(images.size(0))]
         with torch.no_grad():
             queries = self.encoder(images).cpu().numpy()
-        for query in queries:
-            self._process_query(query)
+        for i, query in enumerate(queries):
+            is_attack = self._process_query(query)
+            is_adv[i] = 1 if is_attack else 0
+        return is_adv
 
     def _process_query(self, query):
         k = self.K
@@ -81,6 +84,7 @@ class Detector:
             self.detection_count += 1
             self._write_log(k_avg_dist)
             self.clear_memory()
+        return is_attack
 
     def clear_memory(self):
         self.buffer = []
@@ -103,6 +107,7 @@ class Detector:
     def __call__(self, images):
         images = images.cuda()
         # ---- Going through detection
-        self._process(images)
+        is_adv = self._process(images)
         # ----------------------------
-        return self.blackbox(images)
+        output = self.blackbox(images)
+        return is_adv, output

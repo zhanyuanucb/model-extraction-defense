@@ -26,16 +26,6 @@ class RandomAdversary(object):
         for x_t, _ in self.queryset:
             x_t = x_t.cuda()
             y_t = self.blackbox(x_t).cpu()
-            #if hasattr(self.queryset, 'samples'):
-            #    # Any DatasetFolder (or subclass) has this attribute
-            #    # Saving image paths are space-efficient
-            #    img_t = [self.queryset.samples[i][0] for i in idxs]  # Image paths
-            #else:
-            #    # Otherwise, store the image itself
-            #    # But, we need to store the non-transformed version
-            #    img_t = [self.queryset.data[i] for i in idxs]
-            #    if isinstance(self.queryset.data[0], torch.Tensor):
-            #        img_t = [x.numpy() for x in img_t]
             images.append(x_t.cpu().clone())
             labels.append(y_t.clone())
 
@@ -44,10 +34,10 @@ class RandomAdversary(object):
 
 
 class JDAAdversary(object):
-    def __init__(self, adversary_model, blackbox, eps=0.1, steps=1, momentum=0):
+    def __init__(self, adversary_model, blackbox, MEAN, STD, eps=0.1, steps=1, momentum=0):
         self.adversary_model = adversary_model
         self.blackbox = blackbox
-        self.JDA = MultiStepJDA(self.adversary_model, self.blackbox, eps=eps, steps=steps, momentum=momentum)
+        self.JDA = MultiStepJDA(self.adversary_model, self.blackbox, MEAN, STD, eps=eps, steps=steps, momentum=momentum)
 
     def augment(self, dataloader, outdir):
         return self.JDA(dataloader, outdir)
