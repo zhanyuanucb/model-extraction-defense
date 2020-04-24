@@ -123,7 +123,9 @@ def main():
     parser = argparse.ArgumentParser(description='Train similarity encoder')
     parser.add_argument('--out_dir', metavar='PATH', type=str,
                         help='Destination directory to store trained model', default="/mydata/model-extraction/model-extraction-defense/defense/similarity_encoding")
-    parser.add_argument('--dataset_name', metavar='TYPE', type=str, help='Name of adversary\'s dataset (P_A(X))', default='CIFAR10')
+    parser.add_argument('--ckp_dir', metavar='PATH', type=str,
+                        help='Destination directory to store trained model', default="/mydata/model-extraction/model-extraction-defense/defense/similarity_encoding")
+    parser.add_argument('--dataset_name', metavar='TYPE', type=str, help='Name of dataset', default='CIFAR10')
     parser.add_argument('--model_name', metavar='TYPE', type=str, help='Model name', default="simnet")
     parser.add_argument('--num_classes', metavar='TYPE', type=int, help='Number of classes', default=10)
     parser.add_argument('--batch_size', metavar='TYPE', type=int, help='Batch size of queries', default=1)
@@ -133,7 +135,7 @@ def main():
     parser.add_argument('--optimizer_name', metavar='TYPE', type=str, help='Optimizer name', default="adam")
     parser.add_argument('--ckpt_suffix', metavar='TYPE', type=str, default="")
     parser.add_argument('--margin', type=lambda x: np.sqrt(int(x)))
-    parser.add_argument('--load_pretrained', metavar='TYPE', type=int, default=1)
+    parser.add_argument('--load_pretrained', action='store_true')
 
     # ----------- Other params
     parser.add_argument('-d', '--device_id', metavar='D', type=int, help='Device id', default=0)
@@ -175,10 +177,11 @@ def main():
     optimizer_name = params["optimizer_name"]
     optimizer = get_optimizer(model.parameters(), optimizer_name)
     checkpoint_suffix = params["ckpt_suffix"]
+    ckp_dir = params["ckp_dir"]
     load_pretrained = params['load_pretrained']
     callback = params['callback']
     if load_pretrained:
-        ckp = osp.join(out_path, f"checkpoint{checkpoint_suffix}.pth.tar")
+        ckp = osp.join(ckp_dir, f"checkpoint{checkpoint_suffix}.pth.tar")
         if not osp.isfile(ckp):
             print("=> no checkpoint found at '{}' but load_pretrained is {}".format(ckp, load_pretrained))
             exit(1)

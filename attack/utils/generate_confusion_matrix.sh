@@ -1,0 +1,4 @@
+python inspect_confusion_matrix.py --ckp_path=/mydata/model-extraction/model-extraction-defense/attack/adversary/models/cifar10/2020-04-21_08:14:18 --ckp_suffix=budget64000 --model_name=resnet34 --dataset_name=CIFAR10 --num_classes=10
+python inspect_confusion_matrix.py --ckp_path=/mydata/model-extraction/model-extraction-defense/attack/adversary/models/cifar10/2020-04-18_02:26:09 --ckp_suffix=budget64000 --model_name=resnet34 --dataset_name=CIFAR10 --num_classes=10
+python inspect_confusion_matrix.py --ckp_path=/mydata/model-extraction/model-extraction-defense/attack/adversary/models/cifar10/2020-04-18_01:12:12 --ckp_suffix=budget64000 --model_name=resnet34 --dataset_name=CIFAR10 --num_classes=10
+python inspect_confusion_matrix.py --ckp_path=/mydata/model-extraction/model-extraction-defense/attack/adversary/models/cifar10/2020-04-17_04:14:42 --ckp_suffix=budget64000 --model_name=resnet18 --dataset_name=CIFAR10 --num_classes=10

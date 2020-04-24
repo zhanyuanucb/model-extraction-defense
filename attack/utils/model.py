@@ -69,6 +69,20 @@ def soft_cross_entropy(pred, soft_targets, weights=None):
 def sim_loss(o_feat, t_feat, d_feat, margin=np.sqrt(10)):
     return torch.mean(torch.norm(o_feat - t_feat, p=2, dim=1)**2 + F.relu(margin**2 - torch.norm(o_feat - d_feat, p=2, dim=1)**2))
 
+def get_optimizer(parameters, optimizer_type, lr=0.01, momentum=0.5, **kwargs):
+    assert optimizer_type in ['sgd', 'sgdm', 'adam', 'adagrad']
+    if optimizer_type == 'sgd':
+        optimizer = optim.SGD(parameters, lr)
+    elif optimizer_type == 'sgdm':
+        optimizer = optim.SGD(parameters, lr, momentum=momentum)
+    elif optimizer_type == 'adagrad':
+        optimizer = optim.Adagrad(parameters)
+    elif optimizer_type == 'adam':
+        optimizer = optim.Adam(parameters)
+    else:
+        raise ValueError('Unrecognized optimizer type')
+    return optimizer
+
 def train_step(model, train_loader, criterion, optimizer, epoch, device, scheduler, log_interval=10):
     model.train()
     train_loss = 0.
@@ -79,8 +93,6 @@ def train_step(model, train_loader, criterion, optimizer, epoch, device, schedul
     t_start = time.time()
 
     for batch_idx, (inputs, targets) in enumerate(train_loader):
-        #print(f"train_step: inputs dtype: {inputs.dtype}")
-        #print(f"train_step: targets dtype: {targets.dtype}")
         inputs, targets = inputs.to(device), targets.to(device)
         optimizer.zero_grad()
         outputs = model(inputs)

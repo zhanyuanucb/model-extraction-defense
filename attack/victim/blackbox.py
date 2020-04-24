@@ -59,9 +59,7 @@ class Blackbox(object):
         model = model.to(device)
 
         # Load weights
-        checkpoint_path = osp.join(model_dir, 'model_best.pth.tar')
-        if not osp.exists(checkpoint_path):
-            checkpoint_path = osp.join(model_dir, 'checkpoint.pth.tar')
+        checkpoint_path = osp.join(model_dir, 'checkpoint.pth.tar')
         print("=> loading checkpoint '{}'".format(checkpoint_path))
         checkpoint = torch.load(checkpoint_path)
         epoch = checkpoint['epoch']
@@ -73,8 +71,10 @@ class Blackbox(object):
         return blackbox
 
     def __call__(self, images):
+        images = images.cuda()
         with torch.no_grad():
             logits = self.model(images)
         topk_vals, indices = torch.topk(logits, 1)
         y = torch.zeros_like(logits)
         return y.scatter(1, indices, torch.ones_like(topk_vals))
+        #return F.softmax(logits, dim=1)

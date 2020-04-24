@@ -112,20 +112,21 @@ def get_optimizer(parameters, optimizer_type, lr=0.01, momentum=0.5, **kwargs):
     return optimizer
 
 ## means need to change for different dataset
-params = {"model_name":"resnet18", ##
+params = {"model_name":"resnet34", ##
           "num_classes":10,
           "out_root":"/mydata/model-extraction/model-extraction-defense/attack/adversary/models/cifar10/", ##
           "batch_size":128,
-          "eps":0.1,
+          "eps":0.01,
           "steps":1,
           "phi":6, # Budget = (steps+1)**phi*len(transferset)
           "alt_t": None, # Alternate period of step size sign
-          "epochs":10, 
+          "epochs":50, 
           "momentum":0,
-          "blackbox_dir":'/mydata/model-extraction/model-extraction-defense/attack/victim/models/cifar10/resnet18', ##
+          "blackbox_dir":'/mydata/model-extraction/model-extraction-defense/attack/victim/models/cifar10/wrn28', ##
           "seedset_dir":"/mydata/model-extraction/model-extraction-defense/attack/adversary/models/cifar10", ##
           "testset_name":"CIFAR10", ##
           "optimizer_name":"adam",
+          "use_detector": False,
           "encoder_ckp":"/mydata/model-extraction/model-extraction-defense/defense/similarity_encoding/",
           "encoder_margin":3.2,
           "k":50,
@@ -155,21 +156,24 @@ num_classes = 10
 encoder = zoo.get_net("simnet", modelfamily, num_classes=num_classes)
 
 # ----------- Setup encoder
-encoder_ckp = params["encoder_ckp"]
-encoder_margin = params["encoder_margin"]
-encoder_ckp = osp.join(encoder_ckp, f"{testset_name}-margin-{encoder_margin}")
-ckp = osp.join(encoder_ckp, f"checkpoint.sim-{encoder_margin}.pth.tar")
-print(f"=> loading encoder checkpoint '{ckp}'")
-checkpoint = torch.load(ckp)
-start_epoch = checkpoint['epoch']
-encoder.load_state_dict(checkpoint['state_dict'])
-print("=> loaded checkpoint (epoch {})".format(checkpoint['epoch']))
-
-encoder = encoder.to(device)
-
-detector = Detector(k, thresh, encoder, log_suffix=log_suffix, log_dir=log_dir)
 blackbox_dir = params["blackbox_dir"]
-detector.init(blackbox_dir, device, time=created_on)
+if params["use_detector"]:
+    encoder_ckp = params["encoder_ckp"]
+    encoder_margin = params["encoder_margin"]
+    encoder_ckp = osp.join(encoder_ckp, f"{testset_name}-margin-{encoder_margin}")
+    ckp = osp.join(encoder_ckp, f"checkpoint.sim-{encoder_margin}.pth.tar")
+    print(f"=> loading encoder checkpoint '{ckp}'")
+    checkpoint = torch.load(ckp)
+    start_epoch = checkpoint['epoch']
+    encoder.load_state_dict(checkpoint['state_dict'])
+    print("=> loaded checkpoint (epoch {})".format(checkpoint['epoch']))
+
+    encoder = encoder.to(device)
+
+    blackbox = Detector(k, thresh, encoder, log_suffix=log_suffix, log_dir=log_dir)
+    blackbox.init(blackbox_dir, device, time=created_on)
+else:
+    blackbox = Blackbox.from_modeldir(blackbox_dir, device)
 
 # ----------- Initialize adversary model
 model_name = params["model_name"]
@@ -191,7 +195,7 @@ if not osp.exists(ckp_out_root):
 eps = params["eps"]
 steps= params["steps"]
 momentum= params["momentum"]
-adversary = JDAAdversary(model, detector, eps=eps, steps=steps, momentum=momentum)
+adversary = JDAAdversary(model, blackbox, eps=eps, steps=steps, momentum=momentum)
 
 # ----------- Set up seedset
 seedset_path = osp.join(params["seedset_dir"], 'seed.pt')

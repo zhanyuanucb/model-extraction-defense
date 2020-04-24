@@ -49,9 +49,10 @@ def main():
                         help='input batch size for training (default: 64)')
     parser.add_argument('-e', '--epochs', type=int, default=100, metavar='N',
                         help='number of epochs to train (default: 100)')
-    parser.add_argument('--lr', type=float, default=0.1, metavar='LR',
+    parser.add_argument('--optimizer', type=str, help='Optimizer', default="adam")
+    parser.add_argument('--lr', type=float, default=0.01, metavar='LR',
                         help='learning rate (default: 0.1)')
-    parser.add_argument('--momentum', type=float, default=0.5, metavar='M',
+    parser.add_argument('--momentum', type=float, default=0.9, metavar='M',
                         help='SGD momentum (default: 0.5)')
     parser.add_argument('--log-interval', type=int, default=100, metavar='N',
                         help='how many batches to wait before logging training status')
@@ -83,7 +84,6 @@ def main():
     dataset = datasets.__dict__[dataset_name]
 
     modelfamily = datasets.dataset_to_modelfamily[dataset_name]
-    # Noet: train2 and test2 have no normalization
     train_transform = datasets.modelfamily_to_transforms[modelfamily]['train']
     test_transform = datasets.modelfamily_to_transforms[modelfamily]['test']
     trainset = dataset(train=True, transform=train_transform)
@@ -104,11 +104,19 @@ def main():
     model = zoo.get_net(model_name, modelfamily, pretrained, num_classes=num_classes)
     model = model.to(device)
 
+    # ----------- Set up optimizer
+    optim_type = params['optimizer']
+    lr = params['lr']
+    momentum = params['momentum']
+    optimizer = model_utils.get_optimizer(model.parameters(), optim_type, lr=lr, momentum=momentum)
+    params['optimizer'] = optimizer
+
     # ----------- Train
     out_path = params['out_path']
     model_utils.train_model(model, trainset, testset=testset, device=device, **params)
 
     # Store arguments
+    params['optimizer'] = optim_type
     params['created_on'] = str(datetime.now())
     params_out_path = osp.join(out_path, 'params.json')
     with open(params_out_path, 'w') as jf:

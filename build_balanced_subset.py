@@ -10,11 +10,11 @@ import numpy as np
 import shutil
 
 dataset_dir = osp.join(cfg.DATASET_ROOT, "cifar10/train") 
-dest_root = osp.join("/mydata/model-extraction/data/cifar10_balanced_subset1000")
+dest_root = osp.join("/mydata/model-extraction/data/cifar10_balanced_subset6400")
 if not osp.exists(dest_root):
     os.mkdir(dest_root)
 
-SIZE = 100
+SIZE = 640
 for c in os.listdir(dataset_dir):
     # sample SIZE images from each class
     src_dir = osp.join(dataset_dir, c)
