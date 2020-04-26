@@ -55,16 +55,34 @@ class MultiStepJDA:
         is_advs, confs = [], [] # Inspection
         for images, labels in dataloader:
             self.reset_v(input_shape=images.shape)
+            images, labels = images.to(device), labels.to(device)
 
             for _ in range(self.steps):
-                images, labels = images.to(device), labels.to(device)
                 images, conf = self.augment_step(images, labels)
                 is_adv, y = self.blackbox(images)  # Inspection
                 images_aug.append(images.clone())
                 labels_aug.append(y.cpu().clone())
-                confs.append(conf) # TODO: Select by is_adv
+                confs.append(conf) 
                 is_advs.append(is_adv)
         return torch.cat(images_aug), torch.cat(labels_aug), np.concatenate(is_advs), np.concatenate(confs)
     
     def __call__(self, dataloader):
-        return self.augment(dataloader)
+        images_aug, labels_aug, is_advs, confs = self.augment(dataloader) 
+        adv_confs_batch = [confs[i] for i in range(confs.shape[0]) if is_advs[i]]
+        batch_size = images_aug.size(0)
+
+        # Filter by confidence
+        #cond = [max(conf) < 1. for conf in confs] 
+
+        # Randomly pick fraction of k samples
+        k = 0.6
+        indices = np.random.choice(batch_size, round(batch_size*k), replace=False)
+        cond = [False for _ in range(batch_size)]
+        for idx in indices:
+            cond[idx] = True
+
+        cleaned_images = torch.stack([images_aug[i] for i in range(batch_size) if cond[i]])
+        cleaned_labels = torch.stack([labels_aug[i] for i in range(batch_size) if cond[i]])
+        cleaned_is_advs = [is_advs[i] for i in range(batch_size) if cond[i]]
+        cleaned_confs = np.array([confs[i] for i in range(batch_size) if cond[i]])
+        return cleaned_images, cleaned_labels, adv_confs_batch

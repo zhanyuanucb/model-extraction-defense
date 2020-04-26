@@ -112,15 +112,15 @@ def get_optimizer(parameters, optimizer_type, lr=0.01, momentum=0.5, **kwargs):
     return optimizer
 
 ## means need to change for different dataset
-params = {"model_name":"resnet34", ##
+params = {"model_name":"resnet18", ##
           "num_classes":10,
           "out_root":"/mydata/model-extraction/model-extraction-defense/attack/adversary/models/cifar10/", ##
           "batch_size":128,
           "eps":0.01,
           "steps":1,
-          "phi":4, # Budget = (steps+1)**phi*len(transferset)
+          "phi":3, # Budget = (steps+1)**phi*len(transferset)
           "alt_t": None, # Alternate period of step size sign
-          "epochs":30, 
+          "epochs":15, 
           "momentum":0,
           "blackbox_dir":'/mydata/model-extraction/model-extraction-defense/attack/victim/models/cifar10/wrn28', ##
           "seedset_dir":"/mydata/model-extraction/model-extraction-defense/attack/adversary/models/cifar10", ##
@@ -246,8 +246,13 @@ substitute_out_path = osp.join(out_root, f"substitute_set.pt")
 for p in range(phi):
     if alt_t: # Apply periodic step size
         adversary.JDA.lam *= (-1)**(p//alt_t)
-    images_aug, labels_aug, is_advs, confs = adversary.JDA(train_loader)
-    adv_confs.extend([confs[i] for i in range(confs.shape[0]) if is_advs[i]])
+    images_aug, labels_aug, adv_confs_batch = adversary.JDA(train_loader)
+
+    adv_confs.extend(adv_confs_batch) # Inspect
+    if images_aug.size(0) == 0:
+        print("No additional augmented images, so exit.")
+        break
+
     images_sub = torch.cat([images_sub, images_aug])
     labels_sub = torch.cat([labels_sub, labels_aug])
     substitute_samples = [images_sub, labels_sub]
@@ -261,7 +266,8 @@ for p in range(phi):
                                               checkpoint_suffix=checkpoint_suffix, device=device, optimizer=optimizer)
                             
 # Store arguments
-params['budget'] = budget
+params['budget'] = images_sub.size(0)
+params['num_pruned'] = budget-params['budget']
 params_out_path = osp.join(ckp_out_root, 'params_train.json')
 with open(params_out_path, 'w') as jf:
     json.dump(params, jf, indent=True)
@@ -269,4 +275,4 @@ with open(params_out_path, 'w') as jf:
 # Inspect
 confs_path = osp.join(ckp_out_root, 'adv_confs.np')
 with open(confs_path, 'wb') as file:
-    pickle.dump(adv_confs, confs_path)
+    pickle.dump(adv_confs, file)
