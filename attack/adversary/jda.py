@@ -10,7 +10,7 @@ import pickle
 use_cuda = torch.cuda.is_available()
 device = torch.device("cuda:0" if use_cuda else "cpu")
 class MultiStepJDA:
-    def __init__(self, adversary_model, blackbox, MEAN, STD, criterion=model_utils.soft_cross_entropy, eps=0.1, steps=1, momentum=0):
+    def __init__(self, adversary_model, blackbox, mean, std, criterion=model_utils.soft_cross_entropy, eps=0.1, steps=1, momentum=0):
         self.adversary_model = adversary_model
         self.blackbox = blackbox
         self.criterion = criterion
@@ -18,8 +18,8 @@ class MultiStepJDA:
         self.steps = steps
         self.momentum = momentum
         self.v = None 
-        self.MEAN = torch.Tensor(MEAN).reshape([1, 3, 1, 1])
-        self.STD = torch.Tensor(STD).reshape([1, 3, 1, 1])
+        self.MEAN = torch.Tensor(mean).reshape([1, 3, 1, 1])
+        self.STD = torch.Tensor(std).reshape([1, 3, 1, 1])
     
     def reset_v(self, input_shape):
         self.v = torch.zeros(input_shape, dtype=torch.float32)#.to(device)
@@ -72,14 +72,14 @@ class MultiStepJDA:
         batch_size = images_aug.size(0)
 
         # Filter by confidence
-        #cond = [max(conf) < 1. for conf in confs] 
+        cond = [max(conf) < 0.9 for conf in confs] 
 
         # Randomly pick fraction of k samples
-        k = 1.
-        indices = np.random.choice(batch_size, round(batch_size*k), replace=False)
-        cond = [False for _ in range(batch_size)]
-        for idx in indices:
-            cond[idx] = True
+        #k = 1.
+        #indices = np.random.choice(batch_size, round(batch_size*k), replace=False)
+        #cond = [False for _ in range(batch_size)]
+        #for idx in indices:
+        #    cond[idx] = True
 
         cleaned_images = torch.stack([images_aug[i] for i in range(batch_size) if cond[i]])
         cleaned_labels = torch.stack([labels_aug[i] for i in range(batch_size) if cond[i]])

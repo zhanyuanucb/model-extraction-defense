@@ -127,11 +127,11 @@ params = {"model_name":"resnet18", ##
           "testset_name":"CIFAR10", ##
           "optimizer_name":"adam",
           "use_detector": True,
-          "encoder_arch_name": "wrn28",
+          "encoder_arch_name": "simnet",
           "encoder_ckp":"/mydata/model-extraction/model-extraction-defense/defense/similarity_encoding/",
-          "encoder_margin":31.6,
-          "k":200,
-          "thresh":0.9288784615993501, ##
+          "encoder_margin":3.2,
+          "k":10,
+          "thresh":0.0397684188708663, ##
           "log_suffix":"testing",
           "log_dir":"./"}
 
@@ -156,13 +156,14 @@ encoder_arch_name = params["encoder_arch_name"]
 modelfamily = datasets.dataset_to_modelfamily[testset_name]
 num_classes = 10
 encoder = zoo.get_net(encoder_arch_name, modelfamily, num_classes=num_classes)
+MEAN, STD = cfg.NORMAL_PARAMS[modelfamily]
 
 # ----------- Setup encoder
 blackbox_dir = params["blackbox_dir"]
 if params["use_detector"]:
     encoder_ckp = params["encoder_ckp"]
     encoder_margin = params["encoder_margin"]
-    encoder_ckp = osp.join(encoder_ckp, f"{testset_name}-margin-{encoder_margin}")
+    encoder_ckp = osp.join(encoder_ckp, encoder_arch_name, f"{testset_name}-margin-{encoder_margin}")
     ckp = osp.join(encoder_ckp, f"checkpoint.sim-{encoder_margin}.pth.tar")
     print(f"=> loading encoder checkpoint '{ckp}'")
     checkpoint = torch.load(ckp)
@@ -172,7 +173,7 @@ if params["use_detector"]:
 
     encoder = encoder.to(device)
 
-    blackbox = Detector(k, thresh, encoder, log_suffix=log_suffix, log_dir=log_dir)
+    blackbox = Detector(k, thresh, encoder, MEAN, STD, log_suffix=log_suffix, log_dir=log_dir)
     blackbox.init(blackbox_dir, device, time=created_on)
 else:
     blackbox = Blackbox.from_modeldir(blackbox_dir, device)
@@ -197,7 +198,6 @@ if not osp.exists(ckp_out_root):
 eps = params["eps"]
 steps= params["steps"]
 momentum= params["momentum"]
-MEAN, STD = cfg.NORMAL_PARAMS[modelfamily]
 adversary = JDAAdversary(model, blackbox, MEAN, STD, eps=eps, steps=steps, momentum=momentum) 
 # ----------- Set up seedset
 seedset_path = osp.join(params["seedset_dir"], 'seed.pt')

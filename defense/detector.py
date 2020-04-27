@@ -25,7 +25,7 @@ from attack.victim.blackbox import Blackbox
 
 
 class Detector:
-    def __init__(self, k, thresh, encoder, buffer_size=1000, log_suffix="", log_dir="./"):
+    def __init__(self, k, thresh, encoder, mean, std, buffer_size=1000, log_suffix="", log_dir="./"):
         self.blackbox = None
         self.query_count = 0
         self.detection_count = 0
@@ -35,6 +35,9 @@ class Detector:
         self.buffer_size = buffer_size
         self.buffer = []
         self.memory = []
+        self.MEAN = torch.Tensor(mean).reshape([1, 3, 1, 1]).cuda()
+        self.STD = torch.Tensor(std).reshape([1, 3, 1, 1]).cuda()
+
         self.log_file = osp.join(log_dir, f"detector.{log_suffix}.log.tsv")
     
     def init(self, blackbox_dir, device, time=None):
@@ -44,6 +47,7 @@ class Detector:
     def _process(self, images):
         is_adv = [0 for _ in range(images.size(0))]
         with torch.no_grad():
+            images = images * self.STD + self.MEAN
             queries = self.encoder(images).cpu().numpy()
         for i, query in enumerate(queries):
             is_attack = self._process_query(query)

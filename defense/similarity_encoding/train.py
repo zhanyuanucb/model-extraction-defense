@@ -159,8 +159,8 @@ def main():
     if dataset_name not in valid_datasets:
         raise ValueError('Dataset not found. Valid arguments = {}'.format(valid_datasets))
     modelfamily = datasets.dataset_to_modelfamily[dataset_name]
-    train_transform = datasets.modelfamily_to_transforms[modelfamily]['train']
-    test_transform = datasets.modelfamily_to_transforms[modelfamily]['test']
+    train_transform = datasets.modelfamily_to_transforms[modelfamily]['train2']
+    test_transform = datasets.modelfamily_to_transforms[modelfamily]['test2']
     random_transform = transform_utils.RandomTransforms(modelfamily=modelfamily)
     trainset = datasets.__dict__[dataset_name](train=True, transform=train_transform) # Augment data while training
     valset = datasets.__dict__[dataset_name](train=False, transform=test_transform)
@@ -197,8 +197,8 @@ def main():
         start_epoch = checkpoint['epoch']
         best_test_acc = checkpoint['best_acc']
         model.load_state_dict(checkpoint['state_dict'])
-        #optimizer.load_state_dict(checkpoint['optimizer'])
         print("=> loaded checkpoint (epoch {})".format(checkpoint['epoch']))
+        print(f"=> Test accuracy: {best_test_acc}%")
     # -----------------------------------------------------
     
     # Build dataset for Positive/Negative samples
@@ -219,7 +219,7 @@ def main():
     margin_test = margin_train
     sim_epochs = params['sim_epochs']
     checkpoint_suffix = ".sim-{:.1f}".format(margin_test)
-    out_path = osp.join(out_path, "{}-margin-{:.1f}".format(dataset_name, margin_test))
+    out_path = osp.join(out_path, model_name, "{}-margin-{:.1f}".format(dataset_name, margin_test))
     if not osp.exists(out_path):
         os.mkdir(out_path)
     encoder_utils.train_model(model, sim_trainset, out_path, epochs=sim_epochs, testset=sim_valset,
