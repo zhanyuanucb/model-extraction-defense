@@ -118,7 +118,7 @@ params = {"model_name":"resnet18", ##
           "batch_size":128,
           "eps":0.01,
           "steps":1,
-          "phi":3, # Budget = (steps+1)**phi*len(transferset)
+          "phi":4, # Budget = (steps+1)**phi*len(transferset)
           "alt_t": None, # Alternate period of step size sign
           "epochs":15, 
           "momentum":0,
@@ -129,9 +129,9 @@ params = {"model_name":"resnet18", ##
           "use_detector": True,
           "encoder_arch_name": "wrn28",
           "encoder_ckp":"/mydata/model-extraction/model-extraction-defense/defense/similarity_encoding/",
-          "encoder_margin":3.2,
+          "encoder_margin":31.6,
           "k":200,
-          "thresh":1.1644, ##
+          "thresh":0.9288784615993501, ##
           "log_suffix":"testing",
           "log_dir":"./"}
 

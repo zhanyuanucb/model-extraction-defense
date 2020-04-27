@@ -197,7 +197,7 @@ def main():
         start_epoch = checkpoint['epoch']
         best_test_acc = checkpoint['best_acc']
         model.load_state_dict(checkpoint['state_dict'])
-        optimizer.load_state_dict(checkpoint['optimizer'])
+        #optimizer.load_state_dict(checkpoint['optimizer'])
         print("=> loaded checkpoint (epoch {})".format(checkpoint['epoch']))
     # -----------------------------------------------------
     
@@ -213,6 +213,7 @@ def main():
     #if gpu_count > 1:
     #   model = nn.DataParallel(model)
     model = model.to(device)
+    optimizer = get_optimizer(model.parameters(), optimizer_name)
 
     margin_train = params['margin']
     margin_test = margin_train

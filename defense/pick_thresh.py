@@ -156,7 +156,7 @@ def main():
 
     # ---------------- Calculate thresholds for each encoder
     for train_data, _ in train_loader:
-        for margin in [3.2]:
+        for margin in [1.0, 10.0, 31.6]:
             encoder_name = f"{dataset_name}-margin-{margin}"
             # ----------- Load Encoder
             model_name = params['model_name']

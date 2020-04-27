@@ -75,7 +75,7 @@ class MultiStepJDA:
         #cond = [max(conf) < 1. for conf in confs] 
 
         # Randomly pick fraction of k samples
-        k = 0.6
+        k = 1.
         indices = np.random.choice(batch_size, round(batch_size*k), replace=False)
         cond = [False for _ in range(batch_size)]
         for idx in indices:
