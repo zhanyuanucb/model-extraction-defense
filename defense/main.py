@@ -118,7 +118,7 @@ params = {"model_name":"resnet18", ##
           "batch_size":128,
           "eps":0.01,
           "steps":1,
-          "phi":4, # Budget = (steps+1)**phi*len(transferset)
+          "phi":3, # Budget = (steps+1)**phi*len(transferset)
           "alt_t": None, # Alternate period of step size sign
           "epochs":15, 
           "momentum":0,

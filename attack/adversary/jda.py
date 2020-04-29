@@ -72,10 +72,11 @@ class MultiStepJDA:
         batch_size = images_aug.size(0)
 
         # Filter by confidence
+        #cond = [max(conf) <= 1. for conf in confs] # if don't apply filtering
         cond = [max(conf) < 0.9 for conf in confs] 
 
         # Randomly pick fraction of k samples
-        #k = 1.
+        #k = 0.6
         #indices = np.random.choice(batch_size, round(batch_size*k), replace=False)
         #cond = [False for _ in range(batch_size)]
         #for idx in indices:
