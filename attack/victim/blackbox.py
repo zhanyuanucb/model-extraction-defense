@@ -68,10 +68,11 @@ class Blackbox(object):
         print("=> loaded checkpoint (epoch {}, acc={:.2f})".format(epoch, best_test_acc))
 
         blackbox = cls(model)
+        blackbox.device = device
         return blackbox
 
     def __call__(self, images):
-        images = images.cuda()
+        images = images.to(self.device)
         with torch.no_grad():
             logits = self.model(images)
         topk_vals, indices = torch.topk(logits, 1)

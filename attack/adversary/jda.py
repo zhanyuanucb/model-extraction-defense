@@ -7,10 +7,8 @@ import numpy as np
 import os.path as osp
 import pickle
 
-use_cuda = torch.cuda.is_available()
-device = torch.device("cuda:0" if use_cuda else "cpu")
 class MultiStepJDA:
-    def __init__(self, adversary_model, blackbox, mean, std, criterion=model_utils.soft_cross_entropy, eps=0.1, steps=1, momentum=0):
+    def __init__(self, adversary_model, blackbox, mean, std, device, criterion=model_utils.soft_cross_entropy, eps=0.1, steps=1, momentum=0):
         self.adversary_model = adversary_model
         self.blackbox = blackbox
         self.criterion = criterion
@@ -20,6 +18,7 @@ class MultiStepJDA:
         self.v = None 
         self.MEAN = torch.Tensor(mean).reshape([1, 3, 1, 1])
         self.STD = torch.Tensor(std).reshape([1, 3, 1, 1])
+        self.device = device
     
     def reset_v(self, input_shape):
         self.v = torch.zeros(input_shape, dtype=torch.float32)#.to(device)
@@ -55,7 +54,7 @@ class MultiStepJDA:
         is_advs, confs = [], [] # Inspection
         for images, labels in dataloader:
             self.reset_v(input_shape=images.shape)
-            images, labels = images.to(device), labels.to(device)
+            images, labels = images.to(self.device), labels.to(self.device)
 
             for _ in range(self.steps):
                 images, conf = self.augment_step(images, labels)

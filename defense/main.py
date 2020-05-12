@@ -13,6 +13,7 @@ from PIL import Image
 from torch.utils.data import Dataset
 from torch import optim
 from torchvision.datasets.folder import ImageFolder, IMG_EXTENSIONS, default_loader
+from torchvision.transforms import transforms
 
 import attack.config as cfg
 import attack.utils.model as model_utils
@@ -87,11 +88,17 @@ class ImageTensorSet(Dataset):
     Data are saved as:
     List[data:torch.Tensor(), labels:torch.Tensor()]
     """
-    def __init__(self, samples):
+    def __init__(self, samples, transform=None, dataset="CIFAR10"):
         self.data, self.targets = samples
+        self.transform = transform
+        self.mode = "RGB" if dataset != "MNIST" else "L"
 
     def __getitem__(self, index):
         img, target = self.data[index], self.targets[index]
+        if self.transform is not None:
+            img = Image.fromarray(img.numpy().transpose([1, 2, 0]), mode=self.mode)
+            img = self.transform(img)
+
         return img, target
 
     def __len__(self):
@@ -137,7 +144,7 @@ params = {"model_name":"resnet18", ##
 
 # ------------ Start
 use_cuda = torch.cuda.is_available()
-device = torch.device("cuda:0" if use_cuda else "cpu")
+device = torch.device("cuda:1" if use_cuda else "cpu")
 if use_cuda:
     print("GPU: {}".format(torch.cuda.get_device_name(0)))
 else:
@@ -183,8 +190,8 @@ model_name = params["model_name"]
 # model = model_utils.get_net(model_name, n_output_classes=num_classes, pretrained=pretrained)
 model = zoo.get_net(model_name, modelfamily, num_classes=num_classes)
 
-if gpu_count > 1:
-   model = nn.DataParallel(model)
+#if gpu_count > 1:
+#   model = nn.DataParallel(model)
 model = model.to(device)
 
 # ----------- Initialize adversary
@@ -198,7 +205,7 @@ if not osp.exists(ckp_out_root):
 eps = params["eps"]
 steps= params["steps"]
 momentum= params["momentum"]
-adversary = JDAAdversary(model, blackbox, MEAN, STD, eps=eps, steps=steps, momentum=momentum) 
+adversary = JDAAdversary(model, blackbox, MEAN, STD, device, eps=eps, steps=steps, momentum=momentum) 
 # ----------- Set up seedset
 seedset_path = osp.join(params["seedset_dir"], 'seed.pt')
 images_sub, labels_sub = torch.load(seedset_path)
@@ -218,10 +225,23 @@ if len(testset.classes) != num_classes:
     raise ValueError('# Transfer classes ({}) != # Testset classes ({})'.format(num_classes, len(testset.classes)))
 
 # ----------- Set up seed images
-#np.random.seed(cfg.DEFAULT_SEED)
-#torch.manual_seed(cfg.DEFAULT_SEED)
-#torch.cuda.manual_seed(cfg.DEFAULT_SEED)
-substitute_set = ImageTensorSet(seedset_samples)
+
+# Blinding function
+scale_r = 0.36
+bright_r = 0.204
+contrast_r = 0.79
+
+blind_transform = transforms.RandomChoice(
+            [transforms.RandomAffine(0, scale=(1-scale_r, 1+scale_r)), # Pixel-wise Scale, r=0.17
+            transforms.ColorJitter(brightness=bright_r), # Brightness, r=0.09
+            transforms.ColorJitter(contrast=contrast_r) # Contrast, r=0.55
+            ]
+            )
+normalize = datasets.modelfamily_to_transforms[modelfamily]['test']
+
+blind_function = transforms.Compose([blind_transform, normalize])
+blind_function = None
+substitute_set = ImageTensorSet(seedset_samples, transform=blind_function)
 print('=> Training at budget = {}'.format(len(substitute_set)))
 
 optimizer_name = params["optimizer_name"]
@@ -259,7 +279,7 @@ for p in range(phi):
     torch.save(substitute_samples, substitute_out_path)
     print('=> substitute set ({} samples) written to: {}'.format(substitute_samples[0].size(0), substitute_out_path))
 
-    substitute_set = ImageTensorSet(substitute_samples)
+    substitute_set = ImageTensorSet(substitute_samples, transform=blind_function)
     print(f"Substitute training epoch {p}")
     print(f"Current size of the substitute set {len(substitute_set)}")
     _, train_loader = model_utils.train_model(model, substitute_set, ckp_out_root, epochs=epochs, testset=testloader, criterion_train=criterion_train,

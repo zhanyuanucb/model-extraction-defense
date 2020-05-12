@@ -37,7 +37,10 @@ class DefaultTransforms:
 
 class RandomTransforms:
 
-    def __init__(self, modelfamily="cifar"):
+    def __init__(self, modelfamily="cifar", normal=False,
+                 rotate_r=0.018, translate_r=0.45, scale_r=0.17, crop_r=0.04,
+                 bright_r=0.09, contrast_r=0.55, unif_r=0.064, norm_std=0.095):
+        self.normal = normal
         if modelfamily == "cifar":
             self.normalize = transforms.Normalize(mean=cfg.CIFAR_MEAN,
                                              std=cfg.CIFAR_STD)
@@ -53,36 +56,49 @@ class RandomTransforms:
             self.size = 28
         else:
             raise ValueError
+        self.rotate_r = rotate_r
+        self.translate_r = translate_r
+        self.scale_r = scale_r
+        self.crop_r = crop_r
+        self.bright_r = bright_r
+        self.contrast_r = contrast_r
+        self.unif_r = unif_r 
+        self.norm_std = norm_std
 
-        self.candidates = [transforms.RandomRotation(0.018), # Rotation r=0.018
-                           transforms.RandomAffine(0, translate=(0.45, 0.45), resample=PIL.Image.BILINEAR), # Translate, r=0.45
-                           transforms.RandomAffine(0, scale=(1-0.17, 1+0.17)), # Pixel-wise Scale, r=0.17
-                           transforms.RandomResizedCrop(self.size, scale=(1-0.04, 1.0), ratio=(1, 1)), # Crop and Resize, r=0.04, also resize from 3/4 to 4/3 (by default)
-                           transforms.ColorJitter(brightness=0.09), # Brightness, r=0.09
-                           transforms.ColorJitter(contrast=0.55) # Contrast, r=0.55
+        self.candidates = [transforms.RandomRotation(self.rotate_r), # Rotation r=0.018
+                           transforms.RandomAffine(0, translate=(self.translate_r, self.translate_r), resample=PIL.Image.BILINEAR), # Translate, r=0.45
+                           transforms.RandomAffine(0, scale=(1-self.scale_r, 1+self.scale_r)), # Pixel-wise Scale, r=0.17
+                           transforms.RandomResizedCrop(self.size, scale=(1-self.crop_r, 1.0), ratio=(1, 1)), # Crop and Resize, r=0.04, also resize from 3/4 to 4/3 (by default)
+                           transforms.ColorJitter(brightness=self.bright_r), # Brightness, r=0.09
+                           transforms.ColorJitter(contrast=self.contrast_r) # Contrast, r=0.55
                            ] if modelfamily != "mnist" else [
-                           transforms.RandomRotation(0.018, fill=(0,)), # Rotation r=0.018
-                           transforms.RandomAffine(0, translate=(0.45, 0.45), resample=PIL.Image.BILINEAR, fillcolor=(0,)), # Translate, r=0.45
-                           transforms.RandomAffine(0, scale=(1-0.17, 1+0.17), fillcolor=(0,)), # Pixel-wise Scale, r=0.17
-                           transforms.RandomResizedCrop(self.size, scale=(1-0.04, 1.0), ratio=(1, 1)), # Crop and Resize, r=0.04, also resize from 3/4 to 4/3 (by default)
-                           transforms.ColorJitter(brightness=0.09), # Brightness, r=0.09
-                           transforms.ColorJitter(contrast=0.55) # Contrast, r=0.55
+                           transforms.RandomRotation(self.rotate_r, fill=(0,)), # Rotation r=0.018
+                           transforms.RandomAffine(0, translate=(self.translate_r, self.translate_r), resample=PIL.Image.BILINEAR, fillcolor=(0,)), # Translate, r=0.45
+                           transforms.RandomAffine(0, scale=(1-self.scale_r, 1+self.scale_r), fillcolor=(0,)), # Pixel-wise Scale, r=0.17
+                           transforms.RandomResizedCrop(self.size, scale=(1-self.crop_r, 1.0), ratio=(1, 1)), # Crop and Resize, r=0.04, also resize from 3/4 to 4/3 (by default)
+                           transforms.ColorJitter(brightness=self.bright_r), # Brightness, r=0.09
+                           transforms.ColorJitter(contrast=self.contrast_r) # Contrast, r=0.55
                            ]
 
         self.noise_weight = 0.25 
         self.affine_weight = 1 - self.noise_weight
                 
-        self.noise = transforms.RandomChoice([transforms.Lambda(lambda x: x + torch.randn_like(x).to(x.device) * 0.095),
-                                              transforms.Lambda(lambda x: x + 0.128*torch.rand_like(x).to(x.device) - 0.064)]) 
-        self.noise_transform = transforms.Compose([transforms.ToTensor(),
-                                                   #self.normalize,
-                                                   self.noise])
-        self.affinecolor_transform = transforms.Compose([transforms.RandomChoice(self.candidates),
-                                                         transforms.ToTensor(),
-                                                         #self.normalize
-                                                        ])
-        self.random_transform = transforms.RandomChoice([self.noise_transform, self.affinecolor_transform])
-
+        self.noise = transforms.RandomChoice([transforms.Lambda(lambda x: x + torch.randn_like(x).to(x.device) * self.norm_std),
+                                              transforms.Lambda(lambda x: x + 2*self.unif_r*torch.rand_like(x).to(x.device) - self.unif_r)]) 
+        if self.normal:
+            self.noise_transform = transforms.Compose([transforms.ToTensor(),
+                                                       self.normalize,
+                                                       self.noise])
+            self.affinecolor_transform = transforms.Compose([transforms.RandomChoice(self.candidates),
+                                                             transforms.ToTensor(),
+                                                             self.normalize
+                                                            ])
+        else:
+            self.noise_transform = transforms.Compose([transforms.ToTensor(),
+                                                       self.noise])
+            self.affinecolor_transform = transforms.Compose([transforms.RandomChoice(self.candidates),
+                                                             transforms.ToTensor()
+                                                            ])
 
     def __call__(self, x):
         t = random.choice([self.noise_transform, self.affinecolor_transform], p=[self.noise_weight, self.affine_weight])

@@ -12,10 +12,6 @@ from torch.utils.data import DataLoader
 import torchvision.datasets as tvdatasets
 from attack import datasets
 
-use_cuda = torch.cuda.is_available()
-device = torch.device("cuda:0" if use_cuda else "cpu")
-gpu_count = torch.cuda.device_count()
-
 class RandomAdversary(object):
     def __init__(self, blackbox, queryset):
         self.blackbox = blackbox
@@ -34,10 +30,11 @@ class RandomAdversary(object):
 
 
 class JDAAdversary(object):
-    def __init__(self, adversary_model, blackbox, MEAN, STD, eps=0.1, steps=1, momentum=0):
+    def __init__(self, adversary_model, blackbox, MEAN, STD, device, eps=0.1, steps=1, momentum=0):
         self.adversary_model = adversary_model
         self.blackbox = blackbox
-        self.JDA = MultiStepJDA(self.adversary_model, self.blackbox, MEAN, STD, eps=eps, steps=steps, momentum=momentum)
+        self.device = device
+        self.JDA = MultiStepJDA(self.adversary_model, self.blackbox, MEAN, STD, device=self.device, eps=eps, steps=steps, momentum=momentum)
 
     def augment(self, dataloader, outdir):
         return self.JDA(dataloader, outdir)

@@ -35,12 +35,15 @@ class Detector:
         self.buffer_size = buffer_size
         self.buffer = []
         self.memory = []
-        self.MEAN = torch.Tensor(mean).reshape([1, 3, 1, 1]).cuda()
-        self.STD = torch.Tensor(std).reshape([1, 3, 1, 1]).cuda()
+        self.MEAN = torch.Tensor(mean).reshape([1, 3, 1, 1])
+        self.STD = torch.Tensor(std).reshape([1, 3, 1, 1])
 
         self.log_file = osp.join(log_dir, f"detector.{log_suffix}.log.tsv")
     
     def init(self, blackbox_dir, device, time=None):
+        self.device = device
+        self.MEAN = self.MEAN.to(self.device)
+        self.STD = self.STD.to(self.device)
         self.blackbox = Blackbox.from_modeldir(blackbox_dir, device)
         self._init_log(time)
     
@@ -109,7 +112,7 @@ class Detector:
             log.write('\t'.join(columns) + '\n')
     
     def __call__(self, images):
-        images = images.cuda()
+        images = images.to(self.device)
         # ---- Going through detection
         is_adv = self._process(images)
         # ----------------------------

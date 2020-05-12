@@ -1,0 +1,1 @@
+python val_blind_acc.py --ckp_path=/mydata/model-extraction/model-extraction-defense/attack/victim/models/cifar10/wrn28/checkpoint.pth.tar --dataset_name=CIFAR10 --model_name=wrn28 --num_classes=10
