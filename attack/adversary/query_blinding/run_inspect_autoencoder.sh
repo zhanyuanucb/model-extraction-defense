@@ -1,0 +1,1 @@
+python inspect_autoencoder.py --ckp_dir="/mydata/model-extraction/model-extraction-defense/attack/adversary/query_blinding/auto_encoder" --dataset_name=CIFAR10

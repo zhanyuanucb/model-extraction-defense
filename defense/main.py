@@ -122,7 +122,7 @@ def get_optimizer(parameters, optimizer_type, lr=0.01, momentum=0.5, **kwargs):
 params = {"model_name":"resnet18", ##
           "num_classes":10,
           "out_root":"/mydata/model-extraction/model-extraction-defense/attack/adversary/models/cifar10/", ##
-          "batch_size":128,
+          "batch_size":32,
           "eps":0.01,
           "steps":1,
           "phi":3, # Budget = (steps+1)**phi*len(transferset)
@@ -227,19 +227,19 @@ if len(testset.classes) != num_classes:
 # ----------- Set up seed images
 
 # Blinding function
-scale_r = 0.36
-bright_r = 0.204
-contrast_r = 0.79
-
-blind_transform = transforms.RandomChoice(
-            [transforms.RandomAffine(0, scale=(1-scale_r, 1+scale_r)), # Pixel-wise Scale, r=0.17
-            transforms.ColorJitter(brightness=bright_r), # Brightness, r=0.09
-            transforms.ColorJitter(contrast=contrast_r) # Contrast, r=0.55
-            ]
-            )
-normalize = datasets.modelfamily_to_transforms[modelfamily]['test']
-
-blind_function = transforms.Compose([blind_transform, normalize])
+#scale_r = 0.36
+#bright_r = 0.204
+#contrast_r = 0.79
+#
+#blind_transform = transforms.RandomChoice(
+#            [transforms.RandomAffine(0, scale=(1-scale_r, 1+scale_r)), # Pixel-wise Scale, r=0.17
+#            transforms.ColorJitter(brightness=bright_r), # Brightness, r=0.09
+#            transforms.ColorJitter(contrast=contrast_r) # Contrast, r=0.55
+#            ]
+#            )
+#normalize = datasets.modelfamily_to_transforms[modelfamily]['test']
+#
+#blind_function = transforms.Compose([blind_transform, normalize])
 blind_function = None
 substitute_set = ImageTensorSet(seedset_samples, transform=blind_function)
 print('=> Training at budget = {}'.format(len(substitute_set)))
@@ -282,7 +282,7 @@ for p in range(phi):
     substitute_set = ImageTensorSet(substitute_samples, transform=blind_function)
     print(f"Substitute training epoch {p}")
     print(f"Current size of the substitute set {len(substitute_set)}")
-    _, train_loader = model_utils.train_model(model, substitute_set, ckp_out_root, epochs=epochs, testset=testloader, criterion_train=criterion_train,
+    _, train_loader = model_utils.train_model(model, substitute_set, ckp_out_root, batch_size=batch_size, epochs=epochs, testset=testloader, criterion_train=criterion_train,
                                               checkpoint_suffix=checkpoint_suffix, device=device, optimizer=optimizer)
                             
 # Store arguments

@@ -78,7 +78,7 @@ def train_step(model, train_loader, criterion, optimizer, epoch, device, schedul
         loss = criterion(inputs)
         loss.backward()
         optimizer.step()
-        scheduler.step(epoch)
+        #scheduler.step(epoch)
 
         train_loss += loss.item()
         total += targets.size(0)
@@ -165,8 +165,8 @@ def train_model(model, trainset, out_path, batch_size=64, criterion_train=None, 
         criterion_test = nn.CrossEntropyLoss(reduction='mean', weight=weight)
     if optimizer is None:
         optimizer = optim.SGD(model.parameters(), lr=lr, momentum=momentum, weight_decay=5e-4)
-    if scheduler is None:
-        scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=lr_step, gamma=lr_gamma)
+    #if scheduler is None:
+    #    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=lr_step, gamma=lr_gamma)
     start_epoch = 1
     best_train_loss = float("-inf")
     best_test_loss = float("-inf")
@@ -176,10 +176,11 @@ def train_model(model, trainset, out_path, batch_size=64, criterion_train=None, 
     if resume is not None:
         model_path = resume
         if osp.isfile(model_path):
+            print("=> Resuming...")
             print("=> loading checkpoint '{}'".format(model_path))
             checkpoint = torch.load(model_path)
             start_epoch = checkpoint['epoch']
-            best_test_acc = checkpoint['best_acc']
+            best_test_loss = checkpoint['best_loss']
             model.load_state_dict(checkpoint['state_dict'])
             optimizer.load_state_dict(checkpoint['optimizer'])
             print("=> loaded checkpoint '{}' (epoch {})".format(resume, checkpoint['epoch']))

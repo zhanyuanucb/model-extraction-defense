@@ -1,5 +1,6 @@
 import sys
 sys.path.append('/mydata/model-extraction/model-extraction-defense/')
+import json
 import os
 import os.path as osp
 import argparse
@@ -17,11 +18,11 @@ from datetime import datetime
 
 class BlindLoss(nn.Module):
 
-    def __init__(self, blind, blackbox, random_transform, d=10, c=1, mean=None, std=None):
+    def __init__(self, auto_encoder, f, blinders, d=10, c=1, mean=None, std=None):
         super(BlindLoss, self).__init__()
-        self.blind = blind
-        self.blackbox = blackbox
-        self.random_transform = random_transform
+        self.auto_encoder = auto_encoder
+        self.f = f
+        self.blinders = blinders
         self.d = d
         self.c = c
         self.MEAN = mean
@@ -32,24 +33,25 @@ class BlindLoss(nn.Module):
 
         if self.normalize:
             x_norm = (x - self.MEAN) / self.STD
-            y = self.blackbox(x_norm)
+            y = self.f(x_norm)
         else:
-            y = self.blackbox(x)
+            y = self.f(x)
         
-        x0 = self.random_transform(x)
-        _, x_hat = self.blind(x0)
+        x0 = self.blinders(x)
+        _, x_hat = self.auto_encoder(x0)
 
         if self.normalize:
             x_hat_norm = (x_hat - self.MEAN) / self.STD
-            y_hat = self.blackbox(x_hat_norm)
+            y_hat = self.f(x_hat_norm)
         else:
-            y_hat = self.blackbox(x_hat)
+            y_hat = self.f(x_hat)
 
         H = model_utils.soft_cross_entropy(y, y_hat)
-        x1 = self.random_transform(x)
-        x2 = self.random_transform(x)
-        _, x1_hat = self.blind(x1)
-        _, x2_hat = self.blind(x2)
+
+        x1 = self.blinders(x)
+        x2 = self.blinders(x)
+        _, x1_hat = self.auto_encoder(x1)
+        _, x2_hat = self.auto_encoder(x2)
         C = torch.clamp(torch.norm(x1_hat-x2_hat)**2, 0., self.d**2)
         return H + self.c*C
 
@@ -67,7 +69,7 @@ def main():
     parser.add_argument('--train_epochs', metavar='TYPE', type=int, help='Training epochs', default=10)
     parser.add_argument('--optimizer_name', metavar='TYPE', type=str, help='Optimizer name', default="adam")
     parser.add_argument('--ckpt_suffix', metavar='TYPE', type=str, default="")
-    parser.add_argument('--load_pretrained', action='store_true')
+    parser.add_argument('--resume', metavar="PATH", type=str, default=None)
 
     # ----------- Other params
     parser.add_argument('-w', '--nworkers', metavar='N', type=int, help='# Worker processes to load data', default=10)
@@ -91,7 +93,7 @@ def main():
     trainset = datasets.__dict__[dataset_name](train=True, transform=tvtransforms.ToTensor()) # Augment data while training
     valset = datasets.__dict__[dataset_name](train=False, transform=tvtransforms.ToTensor())
 
-    # ------------ Set up blackbox
+    # ------------ Set up based classifier
     model_dir = params['ckp_dir']
     model_path = osp.join(model_dir, "checkpoint.pth.tar")
     model_name = params['model_name']
@@ -121,30 +123,24 @@ def main():
     auto_encoder = auto_encoder.to(device)
     # ------------
 
-    # ------------ Set up random transformation
-    T = [mytransforms.get_random_gaussian_pt(device=device, max_sigma=0.1),
-         mytransforms.get_random_rotate_kornia(max_deg=22.5),
-         mytransforms.get_random_contrast_pt(device=device, min_alpha=0.9, max_alpha=1.4),
-         mytransforms.get_random_brightness_pt(device=device, min_beta=-0.05, max_beta=0.05)]
-
-    random_transform = mytransforms.RandomTransform(T)
-    # ------------
-
     # ------------ Set up loss function
-    blindloss = BlindLoss(auto_encoder, model, random_transform, mean=MEAN, std=STD)
+    blinders = mytransforms.get_random_gaussian_pt(device=device, max_sigma=0.095)
+    blindloss = BlindLoss(auto_encoder, model, blinders, mean=MEAN, std=STD)
     # ------------
 
+    # ------------ Set up training
     train_epochs = params['train_epochs']
     optimizer_name = params["optimizer_name"]
     optimizer = model_utils.get_optimizer(auto_encoder.parameters(), optimizer_name)
     checkpoint_suffix = params["ckpt_suffix"]
     ckp_dir = params["ckp_dir"]
+    resume = params["resume"]
 
     checkpoint_suffix = ".blind"
     if not osp.exists(out_path):
         os.mkdir(out_path)
-    blind_utils.train_model(model, trainset, out_path, epochs=train_epochs, testset=valset,
-                            criterion_train=blindloss, criterion_test=blindloss,
+    blind_utils.train_model(auto_encoder, trainset, out_path, epochs=train_epochs, testset=valset,
+                            criterion_train=blindloss, criterion_test=blindloss, resume=resume,
                             checkpoint_suffix=checkpoint_suffix, device=device, optimizer=optimizer)
 
     params['created_on'] = str(datetime.now())

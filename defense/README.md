@@ -35,3 +35,13 @@
 | 102400 |     61     |    61.60   |      None    |      0     | 102400 | 
 | 41942  |     36     |    60.96   |    pick 60%  |    60458   | 102400 | 
 | 20121  |     29     |    60.21   | conf. >= 0.9 |    60458   | 102400 | 
+
+
+**Query Blinding Baseline**
+| Budget | # Detected | Test Acc.% |    Query Blinding    |
+|:------:|:----------:|:----------:|:--------------------:|
+| 51200  |     20     |    60.83   |         None         | 
+| 51200  |     11     |    6.63    | random transformation|  
+| 51200  |     --     |    ----    |     auto-encoder     |  
+
+_clean acc 88% -> 82% w/ random transformation_
