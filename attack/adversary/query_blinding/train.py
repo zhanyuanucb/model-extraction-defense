@@ -61,7 +61,7 @@ class BlindersLoss(nn.Module):
         x_diff = (x1_hat - x2_hat).view(x.size(0), -1)
         C = torch.clamp(torch.mean(torch.norm(x_diff, p=2, dim=1))**2, 0, self.d**2)
 
-        return H - self.c*C
+        return H - self.c*C, H, self.c*C
 
 class AutoEncoderBCELoss(nn.Module):
 
@@ -90,6 +90,7 @@ def main():
     parser.add_argument('--ckpt_suffix', metavar='TYPE', type=str, default="")
     parser.add_argument('--resume', metavar="PATH", type=str, default=None)
     parser.add_argument('--load_phase1', action='store_true')
+    parser.add_argument('--attempt', metavar='TYPE', type=int)
 
     # ----------- Other params
     parser.add_argument('-w', '--nworkers', metavar='N', type=int, help='# Worker processes to load data', default=10)
@@ -190,13 +191,14 @@ def main():
                 json.dump(params, jf, indent=True)
 
     # -------------------- Phase 2
+    attempt = params["attempt"]
     print("Start phase 2 training...")
     batch_size = params["batch_size"]
     num_workers = params["nworkers"]
     lr = params["lr"]
     optimizer = model_utils.get_optimizer(auto_encoder.parameters(), optimizer_name, lr=lr)
     criterion = blindloss
-    out_path = osp.join(out_root, "phase2")
+    out_path = osp.join(out_root, f"phase2_{attempt}")
     os_utils.create_dir(out_path)
     blinders.train_model(auto_encoder, trainset, out_path, batch_size=batch_size, epochs=train_epochs, testset=valset,
                             criterion_train=criterion, criterion_test=criterion, resume=resume,

@@ -31,37 +31,7 @@ __maintainer__ = "Zhanyuan Zhang"
 __email__ = "zhang_zhanyuan@berkeley.edu"
 __status__ = "Development"
 
-# Reference: https://github.com/jellycsc/PyTorch-CIFAR-10-autoencoder/blob/master/main.py
-#class Autoencoder(nn.Module):
-#    def __init__(self):
-#        super(Autoencoder, self).__init__()
-#        # Input size: [batch, 3, 32, 32]
-#        # Output size: [batch, 3, 32, 32]
-#        self.encoder = nn.Sequential(
-#            nn.Conv2d(3, 12, 4, stride=2, padding=1),            # [batch, 12, 16, 16]
-#            nn.ReLU(),
-#            nn.Conv2d(12, 24, 4, stride=2, padding=1),           # [batch, 24, 8, 8]
-#            nn.ReLU(),
-#			nn.Conv2d(24, 48, 4, stride=2, padding=1),           # [batch, 48, 4, 4]
-#            nn.ReLU(),
-## 			nn.Conv2d(48, 96, 4, stride=2, padding=1),           # [batch, 96, 2, 2]
-##             nn.ReLU(),
-#        )
-#        self.decoder = nn.Sequential(
-##             nn.ConvTranspose2d(96, 48, 4, stride=2, padding=1),  # [batch, 48, 4, 4]
-##             nn.ReLU(),
-#			nn.ConvTranspose2d(48, 24, 4, stride=2, padding=1),  # [batch, 24, 8, 8]
-#            nn.ReLU(),
-#			nn.ConvTranspose2d(24, 12, 4, stride=2, padding=1),  # [batch, 12, 16, 16]
-#            nn.ReLU(),
-#            nn.ConvTranspose2d(12, 3, 4, stride=2, padding=1),   # [batch, 3, 32, 32]
-#            nn.Sigmoid(),
-#        )
-#
-#    def forward(self, x):
-#        encoded = self.encoder(x)
-#        decoded = self.decoder(encoded)
-#        return encoded, decoded
+
 
 class AutoencoderBlinders(nn.Module):
     def __init__(self, blinders):
@@ -106,6 +76,38 @@ class AutoencoderBlinders(nn.Module):
         x_t = torch.clamp(x + blinders, 0., 1.)
         return x_t
 
+# Reference: https://github.com/jellycsc/PyTorch-CIFAR-10-autoencoder/blob/master/main.py
+class Autoencoder(nn.Module):
+    def __init__(self):
+        super(Autoencoder, self).__init__()
+        # Input size: [batch, 3, 32, 32]
+        # Output size: [batch, 3, 32, 32]
+        self.encoder = nn.Sequential(
+            nn.Conv2d(3, 12, 4, stride=2, padding=1),            # [batch, 12, 16, 16]
+            nn.ReLU(),
+            nn.Conv2d(12, 24, 4, stride=2, padding=1),           # [batch, 24, 8, 8]
+            nn.ReLU(),
+			nn.Conv2d(24, 48, 4, stride=2, padding=1),           # [batch, 48, 4, 4]
+            nn.ReLU(),
+# 			nn.Conv2d(48, 96, 4, stride=2, padding=1),           # [batch, 96, 2, 2]
+#             nn.ReLU(),
+        )
+        self.decoder = nn.Sequential(
+#             nn.ConvTranspose2d(96, 48, 4, stride=2, padding=1),  # [batch, 48, 4, 4]
+#             nn.ReLU(),
+			nn.ConvTranspose2d(48, 24, 4, stride=2, padding=1),  # [batch, 24, 8, 8]
+            nn.ReLU(),
+			nn.ConvTranspose2d(24, 12, 4, stride=2, padding=1),  # [batch, 12, 16, 16]
+            nn.ReLU(),
+            nn.ConvTranspose2d(12, 3, 4, stride=2, padding=1),   # [batch, 3, 32, 32]
+            nn.Sigmoid(),
+        )
+
+    def forward(self, x):
+        encoded = self.encoder(x)
+        decoded = self.decoder(encoded)
+        return encoded, decoded
+
 def train_step(model, train_loader, criterion, optimizer, epoch, device, scheduler, log_interval=10):
     model.train()
     train_loss = 0.
@@ -118,7 +120,10 @@ def train_step(model, train_loader, criterion, optimizer, epoch, device, schedul
     for batch_idx, (inputs, targets) in enumerate(train_loader):
         inputs, targets = inputs.to(device), targets.to(device)
         optimizer.zero_grad()
-        loss = criterion(inputs)
+        loss, H, C = criterion(inputs)
+        #if loss.item() == float("-inf"):
+        #    print(H.item(), C.item())
+        #    exit(1)
         loss.backward()
         optimizer.step()
         #scheduler.step(epoch)
@@ -152,7 +157,7 @@ def test_step(model, test_loader, criterion, device, epoch=0., silent=False):
         for batch_idx, (inputs, targets) in enumerate(test_loader):
             #print(f"testing batch {batch_idx}")
             inputs, targets = inputs.to(device), targets.to(device)
-            loss = criterion(inputs)
+            loss, H, C = criterion(inputs)
 
             test_loss += loss.item()
             total += targets.size(0)
@@ -211,8 +216,8 @@ def train_model(model, trainset, out_path, batch_size=64, criterion_train=None, 
     #if scheduler is None:
     #    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=lr_step, gamma=lr_gamma)
     start_epoch = 1
-    best_train_loss = float("-inf")
-    best_test_loss = float("-inf")
+    best_train_loss = float("inf")
+    best_test_loss = float("inf")
 
     # Resume if required
     if resume is not None:
@@ -252,7 +257,7 @@ def train_model(model, trainset, out_path, batch_size=64, criterion_train=None, 
         if test_loader is not None:
             #print("Start testing")
             test_loss = test_step(model, test_loader, criterion_test, device, epoch=epoch)
-            best_test_loss = max(best_test_loss, test_loss)
+            best_test_loss = min(best_test_loss, test_loss)
 
         # Checkpoint
         if test_loss <= best_test_loss:
