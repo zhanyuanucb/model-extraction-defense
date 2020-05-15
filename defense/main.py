@@ -7,14 +7,7 @@ sys.path.append('/mydata/model-extraction/model-extraction-defense/attack/advers
 import os.path as osp
 import pickle
 from datetime import datetime
-
-import numpy as np
 import torch
-from PIL import Image
-from torch.utils.data import Dataset
-from torch import optim
-from torchvision.datasets.folder import ImageFolder, IMG_EXTENSIONS, default_loader
-from torchvision.transforms import transforms
 
 import attack.config as cfg
 import attack.utils.model as model_utils
@@ -22,104 +15,14 @@ from attack import datasets
 import modelzoo.zoo as zoo
 from detector import *
 from attack.adversary.jda import MultiStepJDA
-#import attack.adversary.query_blinding.blinders as blinders
 from attack.adversary.query_blinding.blinders import AutoencoderBlinders
 import attack.adversary.query_blinding.transforms as blinders_transforms
+from utils import ImageTensorSet
 
 __author = "Zhanyuan Zhang"
 __author_email__ = "zhang_zhanyuan@berkeley.edu"
 __reference__ = "https://github.com/tribhuvanesh/knockoffnets/blob/master/knockoff/adversary/train.py"
 __status__ = "Development"
-
-#----------- Helper functions
-class TransferSetImagePaths(ImageFolder):
-    """TransferSet Dataset, for when images are stored as *paths*"""
-
-    def __init__(self, samples, transform=None, target_transform=None):
-        self.loader = default_loader
-        self.extensions = IMG_EXTENSIONS
-        self.samples = samples
-        self.targets = [s[1] for s in samples]
-        self.transform = transform
-        self.target_transform = target_transform
-
-class MNISTSeedsetImagePaths(ImageFolder):
-    """MNIST Dataset, for when images are stored as *paths*"""
-
-    def __init__(self, samples, transform=None, target_transform=None):
-        self.loader = default_loader
-        self.extensions = IMG_EXTENSIONS
-        self.samples = samples
-        self.targets = [s[1] for s in samples]
-        self.transform = transform
-        self.target_transform = target_transform
-
-    def __getitem__(self, index):
-        image, target = super().__getitem__(index)
-        image = image[0][None] # only use the first channel
-        return image, target
-
-class TransferSetImages(Dataset):
-    def __init__(self, samples, transform=None, target_transform=None):
-        self.samples = samples
-        self.transform = transform
-        self.target_transform = target_transform
-
-        self.data = [self.samples[i][0] for i in range(len(self.samples))]
-        self.targets = [self.samples[i][1] for i in range(len(self.samples))]
-
-    def __getitem__(self, index):
-        img, target = self.data[index], self.targets[index]
-
-        # doing this so that it is consistent with all other datasets
-        # to return a PIL Image
-        img = Image.fromarray(img)
-
-        if self.transform is not None:
-            img = self.transform(img)
-
-        if self.target_transform is not None:
-            target = self.target_transform(target)
-
-        return img, target
-
-    def __len__(self):
-        return len(self.data)
-
-class ImageTensorSet(Dataset):
-    """
-    Data are saved as:
-    List[data:torch.Tensor(), labels:torch.Tensor()]
-    """
-    def __init__(self, samples, transform=None, dataset="CIFAR10"):
-        self.data, self.targets = samples
-        self.transform = transform
-        self.mode = "RGB" if dataset != "MNIST" else "L"
-
-    def __getitem__(self, index):
-        img, target = self.data[index], self.targets[index]
-        if self.transform is not None:
-            img = Image.fromarray(img.numpy().transpose([1, 2, 0]), mode=self.mode)
-            img = self.transform(img)
-
-        return img, target
-
-    def __len__(self):
-        return len(self.data)
-
-def get_optimizer(parameters, optimizer_type, lr=0.01, momentum=0.5, **kwargs):
-    assert optimizer_type in ['sgd', 'sgdm', 'adam', 'adagrad']
-    if optimizer_type == 'sgd':
-        optimizer = optim.SGD(parameters, lr)
-    elif optimizer_type == 'sgdm':
-        optimizer = optim.SGD(parameters, lr, momentum=momentum)
-    elif optimizer_type == 'adagrad':
-        optimizer = optim.Adagrad(parameters)
-    elif optimizer_type == 'adam':
-        optimizer = optim.Adam(parameters)
-    else:
-        raise ValueError('Unrecognized optimizer type')
-    return optimizer
 
 ## means need to change for different dataset
 params = {"model_name":"resnet18", ##
@@ -127,14 +30,14 @@ params = {"model_name":"resnet18", ##
           "out_root":"/mydata/model-extraction/model-extraction-defense/attack/adversary/models/cifar10/", ##
           "batch_size":32,
           "eps":0.01,
-          "steps":3,
+          "steps":5,
           "phi":3, # Budget = (steps+1)**phi*len(transferset)
           "alt_t": None, # Alternate period of step size sign
           "epochs":10, 
           "momentum":0,
           "blackbox_dir":'/mydata/model-extraction/model-extraction-defense/attack/victim/models/cifar10/wrn28', ##
-          #"blinders_dir":'/mydata/model-extraction/model-extraction-defense/attack/adversary/query_blinding/autoencoder_blind/phase2_', ##
-          "blinders_dir":None, ##
+          "blinders_dir":'/mydata/model-extraction/model-extraction-defense/attack/adversary/query_blinding/autoencoder_blind/phase2_', ##
+          #"blinders_dir":None, ##
           "seedset_dir":"/mydata/model-extraction/model-extraction-defense/attack/adversary/models/cifar10", ##
           "testset_name":"CIFAR10", ##
           "optimizer_name":"adam",
@@ -256,8 +159,7 @@ substitute_set = ImageTensorSet(seedset_samples)
 print('=> Training at budget = {}'.format(len(substitute_set)))
 
 optimizer_name = params["optimizer_name"]
-optimizer = get_optimizer(model.parameters(), optimizer_name)
-#print(params)
+optimizer = model_utils.get_optimizer(model.parameters(), optimizer_name)
 
 criterion_train = model_utils.soft_cross_entropy
 
