@@ -14,18 +14,17 @@ import modelzoo.zoo as zoo
 import attack.utils.model as model_utils
 import attack.utils.utils as os_utils
 import attack.config as cfg
-import blind as blind_utils
+import blinders
 import transforms as mytransforms
 from datetime import datetime
 
-class BlindLoss(nn.Module):
+class BlindersLoss(nn.Module):
 
-    def __init__(self, auto_encoder, f, blinders, d=10, c=1, mean=None, std=None):
-        super(BlindLoss, self).__init__()
+    def __init__(self, auto_encoder, f, d=10, c=1, mean=None, std=None):
+        super(BlindersLoss, self).__init__()
         self.BCELoss = nn.BCELoss()
         self.auto_encoder = auto_encoder
         self.f = f
-        self.blinders = blinders
         self.d = d
         self.c = c
         self.MEAN = mean
@@ -80,7 +79,7 @@ def main():
     parser.add_argument('--out_dir', metavar='PATH', type=str,
                         help='Destination directory to store trained model', default="/mydata/model-extraction/model-extraction-defense/attack/adversary/query_blinding/autoencoder_blind")
     parser.add_argument('--ckp_dir', metavar='PATH', type=str,
-                        help='Destination directory to store trained model', default="/mydata/model-extraction/model-extraction-defense/attack/victim/models/cifar10/wrn28")
+                        help='Destination directory to store trained model', default="/mydata/model-extraction/model-extraction-defense/attack/adversary/query_blinding/f")
     parser.add_argument('--dataset_name', metavar='TYPE', type=str, help='Name of dataset', default='CIFAR10')
     parser.add_argument('--model_name', metavar='TYPE', type=str, help='Model name', default="wrn28")
     parser.add_argument('--num_classes', metavar='TYPE', type=int, help='Number of classes', default=10)
@@ -140,14 +139,13 @@ def main():
     # ------------
 
     # ------------ Set up Auto-encoder
-    blinders = mytransforms.get_gaussian_noise(device=device, sigma=0.095)
-    auto_encoder = blind_utils.AutoencoderBlinders(blinders)
+    blinders_fn = mytransforms.get_gaussian_noise(device=device, sigma=0.095)
+    auto_encoder = blinders.AutoencoderBlinders(blinders_fn)
     auto_encoder = auto_encoder.to(device)
     # ------------
 
     # ------------ Set up loss function
-    #blinders = mytransforms.get_uniform_noise(device=device, r=0.032)
-    blindloss = BlindLoss(auto_encoder, model, blinders, mean=MEAN, std=STD)
+    blindloss = BlindersLoss(auto_encoder, model, mean=MEAN, std=STD)
     # ------------
 
     # ------------ Set up training
@@ -200,7 +198,7 @@ def main():
     criterion = blindloss
     out_path = osp.join(out_root, "phase2")
     os_utils.create_dir(out_path)
-    blind_utils.train_model(auto_encoder, trainset, out_path, batch_size=batch_size, epochs=train_epochs, testset=valset,
+    blinders.train_model(auto_encoder, trainset, out_path, batch_size=batch_size, epochs=train_epochs, testset=valset,
                             criterion_train=criterion, criterion_test=criterion, resume=resume,
                             checkpoint_suffix=checkpoint_suffix, device=device, optimizer=optimizer)
 

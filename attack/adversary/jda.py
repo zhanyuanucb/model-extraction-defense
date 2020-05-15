@@ -1,4 +1,5 @@
 import torch
+from torch.autograd import Variable
 import torch.nn as nn
 import torch.nn.functional as F
 import attack.utils.model as model_utils
@@ -8,9 +9,10 @@ import os.path as osp
 import pickle
 
 class MultiStepJDA:
-    def __init__(self, adversary_model, blackbox, mean, std, device, criterion=model_utils.soft_cross_entropy, eps=0.1, steps=1, momentum=0):
+    def __init__(self, adversary_model, blackbox, mean, std, device, criterion=model_utils.soft_cross_entropy, blinders_fn=None eps=0.1, steps=1, momentum=0):
         self.adversary_model = adversary_model
         self.blackbox = blackbox
+        self.blinders_fn = blinders_fn
         self.criterion = criterion
         self.lam = eps/steps
         self.steps = steps
@@ -55,11 +57,14 @@ class MultiStepJDA:
         for images, labels in dataloader:
             self.reset_v(input_shape=images.shape)
             images, labels = images.to(self.device), labels.to(self.device)
+            if self.blinders_fn is not None:
+                images = self.blinders_fn(images)
 
             for _ in range(self.steps):
-                images, conf = self.augment_step(images, labels)
-                is_adv, y = self.blackbox(images)  # Inspection
-                images_aug.append(images.clone())
+                images_t = Variable(images, requires_grad=True)
+                images_t, conf = self.augment_step(images_t, labels)
+                is_adv, y = self.blackbox(images_t)  # Inspection
+                images_aug.append(images_t.clone())
                 labels_aug.append(y.cpu().clone())
                 confs.append(conf) 
                 is_advs.append(is_adv)

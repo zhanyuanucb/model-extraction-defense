@@ -94,6 +94,7 @@ def main():
     if params['train_subset'] is not None:
         idxs = np.arange(len(trainset))
         ntrainsubset = params['train_subset']
+        print(f"Train on {ntrainsubset/len(trainset)*100}% dataset")
         idxs = np.random.choice(idxs, size=ntrainsubset, replace=False)
         trainset = Subset(trainset, idxs)
 

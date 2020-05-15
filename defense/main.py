@@ -3,6 +3,7 @@ import json
 import os
 import sys
 sys.path.append('/mydata/model-extraction/model-extraction-defense/')
+sys.path.append('/mydata/model-extraction/model-extraction-defense/attack/adversary/query_blinding')
 import os.path as osp
 import pickle
 from datetime import datetime
@@ -18,10 +19,12 @@ from torchvision.transforms import transforms
 import attack.config as cfg
 import attack.utils.model as model_utils
 from attack import datasets
-#from attack.adversary.adv import*
 import modelzoo.zoo as zoo
-#from attack.victim.blackbox import Blackbox
 from detector import *
+from attack.adversary.jda import MultiStepJDA
+#import attack.adversary.query_blinding.blinders as blinders
+from attack.adversary.query_blinding.blinders import AutoencoderBlinders
+import attack.adversary.query_blinding.transforms as blinders_transforms
 
 __author = "Zhanyuan Zhang"
 __author_email__ = "zhang_zhanyuan@berkeley.edu"
@@ -130,6 +133,7 @@ params = {"model_name":"resnet18", ##
           "epochs":15, 
           "momentum":0,
           "blackbox_dir":'/mydata/model-extraction/model-extraction-defense/attack/victim/models/cifar10/wrn28', ##
+          "blinders_dir":'/mydata/model-extraction/model-extraction-defense/attack/adversary/query_blinding/autoencoder_blind/phase2_', ##
           "seedset_dir":"/mydata/model-extraction/model-extraction-defense/attack/adversary/models/cifar10", ##
           "testset_name":"CIFAR10", ##
           "optimizer_name":"adam",
@@ -153,7 +157,7 @@ gpu_count = torch.cuda.device_count()
 
 params['created_on'] = str(datetime.now()).replace(' ', '_')[:19]
 created_on = params['created_on']
-# ----------- Initialize detector
+# ----------- Initialize Detector
 k = params["k"]
 thresh = params["thresh"]
 log_suffix = params["log_suffix"]
@@ -165,7 +169,7 @@ num_classes = 10
 encoder = zoo.get_net(encoder_arch_name, modelfamily, num_classes=num_classes)
 MEAN, STD = cfg.NORMAL_PARAMS[modelfamily]
 
-# ----------- Setup encoder
+# ----------- Setup Similarity Encoder
 blackbox_dir = params["blackbox_dir"]
 if params["use_detector"]:
     encoder_ckp = params["encoder_ckp"]
@@ -187,25 +191,47 @@ else:
 
 # ----------- Initialize adversary model
 model_name = params["model_name"]
-# model = model_utils.get_net(model_name, n_output_classes=num_classes, pretrained=pretrained)
 model = zoo.get_net(model_name, modelfamily, num_classes=num_classes)
 
-#if gpu_count > 1:
-#   model = nn.DataParallel(model)
 model = model.to(device)
 
-# ----------- Initialize adversary
+# ----------- Initialize Adversary
 nworkers = 10
 out_root = params["out_root"]
 
 ckp_out_root = osp.join(out_root, created_on)
 if not osp.exists(ckp_out_root):
     os.mkdir(ckp_out_root)
-#substitute_out_root = osp.join(out_path, 'substituteset.pickle')
+
+# attack parameters
 eps = params["eps"]
 steps= params["steps"]
 momentum= params["momentum"]
-adversary = JDAAdversary(model, blackbox, MEAN, STD, device, eps=eps, steps=steps, momentum=momentum) 
+
+# set up query blinding
+blinders_dir = params["blinders_dir"]
+if blinders_dir is not None:
+    blinders_noise_fn = blinders_transforms.get_gaussian_noise(device=device, sigma=0.095)
+    auto_encoder = AutoencoderBlinders(blinders_noise_fn)
+    blinders_ckp = osp.join(blinders_dir, "checkpoint.blind.pth.tar")
+    if osp.isfile(blinders_ckp):
+        print("=> Loading auto-encoder checkpoint '{}'".format(blinders_ckp))
+        checkpoint = torch.load(blinders_ckp)
+        start_epoch = checkpoint['epoch']
+        best_test_loss = checkpoint['best_loss']
+        auto_encoder.load_state_dict(checkpoint['state_dict'])
+        print("=> loaded checkpoint (epoch {})".format(checkpoint['epoch']))
+        print(f"=> Best val loss: {best_test_loss}")
+    else:
+        print("=> no checkpoint found at '{}'".format(blinders_ckp))
+        exit(1)
+    auto_encoder = auto_encoder.to(device)
+    auto_encoder.eval()
+else:
+    auto_encoder = None
+
+adversary = MultiStepJDA(model, blackbox, MEAN, STD, device, blinders_fn=auto_encoder, eps=eps, steps=steps, momentum=momentum) 
+
 # ----------- Set up seedset
 seedset_path = osp.join(params["seedset_dir"], 'seed.pt')
 images_sub, labels_sub = torch.load(seedset_path)
@@ -225,30 +251,7 @@ if len(testset.classes) != num_classes:
     raise ValueError('# Transfer classes ({}) != # Testset classes ({})'.format(num_classes, len(testset.classes)))
 
 # ----------- Set up seed images
-
-# Blinding function
-#scale_r = 0.36
-#bright_r = 0.204
-#contrast_r = 0.79
-#
-#blind_transform = transforms.RandomChoice(
-#            [transforms.RandomAffine(0, scale=(1-scale_r, 1+scale_r)), # Pixel-wise Scale, r=0.17
-#            transforms.ColorJitter(brightness=bright_r), # Brightness, r=0.09
-#            transforms.ColorJitter(contrast=contrast_r) # Contrast, r=0.55
-#            ]
-#            )
-#normalize = datasets.modelfamily_to_transforms[modelfamily]['test']
-#
-#blind_function = transforms.Compose([blind_transform, normalize])
-candidate_blinders = [transforms.RandomRotation(self.rotate_r), # Rotation r=0.018
-                      transforms.RandomAffine(0, translate=(self.translate_r, self.translate_r), resample=PIL.Image.BILINEAR), # Translate, r=0.45
-                      transforms.RandomAffine(0, scale=(1-self.scale_r, 1+self.scale_r)), # Pixel-wise Scale, r=0.17
-                      transforms.RandomResizedCrop(self.size, scale=(1-self.crop_r, 1.0), ratio=(1, 1)), # Crop and Resize, r=0.04, also resize from 3/4 to 4/3 (by default)
-                      transforms.ColorJitter(brightness=self.bright_r), # Brightness, r=0.09
-                      transforms.ColorJitter(contrast=self.contrast_r) # Contrast, r=0.55
-                      ]
-blind_function = None
-substitute_set = ImageTensorSet(seedset_samples, transform=blind_function)
+substitute_set = ImageTensorSet(seedset_samples)
 print('=> Training at budget = {}'.format(len(substitute_set)))
 
 optimizer_name = params["optimizer_name"]
@@ -273,7 +276,7 @@ substitute_out_path = osp.join(out_root, f"substitute_set.pt")
 for p in range(phi):
     if alt_t: # Apply periodic step size
         adversary.JDA.lam *= (-1)**(p//alt_t)
-    images_aug, labels_aug, adv_confs_batch = adversary.JDA(train_loader)
+    images_aug, labels_aug, adv_confs_batch = adversary(train_loader)
 
     adv_confs.extend(adv_confs_batch) # Inspect
     if images_aug.size(0) == 0:

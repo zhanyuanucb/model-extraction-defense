@@ -25,7 +25,7 @@ import attack.config as cfg
 import attack.utils.model as model_utils
 from attack import datasets
 
-import blind as blind_utils
+from blinders import AutoencoderBlinders
 import transforms as mytransforms
 
 use_cuda = torch.cuda.is_available()
@@ -56,9 +56,8 @@ def main():
     MEAN, STD = MEAN.to(device), STD.to(device)
 
     # ---------------- Set up Auto-encoder
-    blinders = mytransforms.get_gaussian_noise(device=device, sigma=0.095)
-    auto_encoder = blind_utils.AutoencoderBlinders(blinders)
-    auto_encoder = auto_encoder.to(device)
+    blinders_fn = mytransforms.get_gaussian_noise(device=device, sigma=0.095)
+    auto_encoder = AutoencoderBlinders(blinders_fn)
 
     auto_path = osp.join(auto_path, "checkpoint.blind.pth.tar")
     if osp.isfile(auto_path):
@@ -68,7 +67,7 @@ def main():
         best_test_loss = checkpoint['best_loss']
         auto_encoder.load_state_dict(checkpoint['state_dict'])
         print("=> loaded checkpoint (epoch {})".format(checkpoint['epoch']))
-        print(f"=> Best val loss: {best_test_loss}%")
+        print(f"=> Best val loss: {best_test_loss}")
     else:
         print("=> no checkpoint found at '{}'".format(auto_path))
         exit(1)

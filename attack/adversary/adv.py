@@ -30,7 +30,7 @@ class RandomAdversary(object):
 
 
 class JDAAdversary(object):
-    def __init__(self, adversary_model, blackbox, MEAN, STD, device, eps=0.1, steps=1, momentum=0):
+    def __init__(self, adversary_model, blackbox, blinders_fn, MEAN, STD, device, eps=0.1, steps=1, momentum=0):
         self.adversary_model = adversary_model
         self.blackbox = blackbox
         self.device = device
