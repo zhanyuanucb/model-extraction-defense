@@ -10,7 +10,21 @@ class RandomTransform:
     def __call__(self, x):
         t = random.choice(self.T)
         return t(x)
-    
+
+def get_uniform_noise(device="cpu", r=0.064):
+
+   def add_uniform_noise(x):
+       noise = 2*r*torch.rand_like(x).to(x.device) - r
+       return noise
+   return add_uniform_noise
+
+def get_gaussian_noise(device="cpu", sigma=0.1):
+
+   def add_gaussian_noise(x):
+       noise = sigma*torch.randn_like(x).to(x.device)
+       return noise
+   return add_gaussian_noise
+   
 def get_random_gaussian_pt(device="cpu", max_sigma=0.1):
     def add_gaussian_noise(x):
         sigma = np.random.uniform(0, max_sigma)

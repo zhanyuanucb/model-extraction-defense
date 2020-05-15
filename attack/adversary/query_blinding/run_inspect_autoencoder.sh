@@ -1,1 +1,4 @@
-python inspect_autoencoder.py --ckp_dir="/mydata/model-extraction/model-extraction-defense/attack/adversary/query_blinding/auto_encoder" --dataset_name=CIFAR10
+#python inspect_autoencoder.py --ckp_dir="/mydata/model-extraction/model-extraction-defense/attack/adversary/query_blinding/autoencoder_blind" --dataset_name=CIFAR10
+#python inspect_autoencoder.py --ckp_dir="/mydata/model-extraction/model-extraction-defense/attack/adversary/query_blinding/autoencoder" --dataset_name=CIFAR10
+#python inspect_autoencoder.py --ckp_dir="/mydata/model-extraction/model-extraction-defense/attack/adversary/query_blinding/autoencoder_blind/phase1" --dataset_name=CIFAR10
+python inspect_autoencoder.py --ckp_dir="/mydata/model-extraction/model-extraction-defense/attack/adversary/query_blinding/autoencoder_blind/phase2" --dataset_name=CIFAR10

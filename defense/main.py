@@ -240,6 +240,13 @@ if len(testset.classes) != num_classes:
 #normalize = datasets.modelfamily_to_transforms[modelfamily]['test']
 #
 #blind_function = transforms.Compose([blind_transform, normalize])
+candidate_blinders = [transforms.RandomRotation(self.rotate_r), # Rotation r=0.018
+                      transforms.RandomAffine(0, translate=(self.translate_r, self.translate_r), resample=PIL.Image.BILINEAR), # Translate, r=0.45
+                      transforms.RandomAffine(0, scale=(1-self.scale_r, 1+self.scale_r)), # Pixel-wise Scale, r=0.17
+                      transforms.RandomResizedCrop(self.size, scale=(1-self.crop_r, 1.0), ratio=(1, 1)), # Crop and Resize, r=0.04, also resize from 3/4 to 4/3 (by default)
+                      transforms.ColorJitter(brightness=self.bright_r), # Brightness, r=0.09
+                      transforms.ColorJitter(contrast=self.contrast_r) # Contrast, r=0.55
+                      ]
 blind_function = None
 substitute_set = ImageTensorSet(seedset_samples, transform=blind_function)
 print('=> Training at budget = {}'.format(len(substitute_set)))

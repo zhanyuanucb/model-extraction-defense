@@ -32,36 +32,79 @@ __email__ = "zhang_zhanyuan@berkeley.edu"
 __status__ = "Development"
 
 # Reference: https://github.com/jellycsc/PyTorch-CIFAR-10-autoencoder/blob/master/main.py
-class Autoencoder(nn.Module):
-    def __init__(self):
-        super(Autoencoder, self).__init__()
-        # Input size: [batch, 3, 32, 32]
-        # Output size: [batch, 3, 32, 32]
-        self.encoder = nn.Sequential(
-            nn.Conv2d(3, 12, 4, stride=2, padding=1),            # [batch, 12, 16, 16]
-            nn.ReLU(),
-            nn.Conv2d(12, 24, 4, stride=2, padding=1),           # [batch, 24, 8, 8]
-            nn.ReLU(),
-			nn.Conv2d(24, 48, 4, stride=2, padding=1),           # [batch, 48, 4, 4]
-            nn.ReLU(),
-# 			nn.Conv2d(48, 96, 4, stride=2, padding=1),           # [batch, 96, 2, 2]
-#             nn.ReLU(),
-        )
-        self.decoder = nn.Sequential(
-#             nn.ConvTranspose2d(96, 48, 4, stride=2, padding=1),  # [batch, 48, 4, 4]
-#             nn.ReLU(),
-			nn.ConvTranspose2d(48, 24, 4, stride=2, padding=1),  # [batch, 24, 8, 8]
-            nn.ReLU(),
-			nn.ConvTranspose2d(24, 12, 4, stride=2, padding=1),  # [batch, 12, 16, 16]
-            nn.ReLU(),
-            nn.ConvTranspose2d(12, 3, 4, stride=2, padding=1),   # [batch, 3, 32, 32]
-            nn.Sigmoid(),
-        )
+#class Autoencoder(nn.Module):
+#    def __init__(self):
+#        super(Autoencoder, self).__init__()
+#        # Input size: [batch, 3, 32, 32]
+#        # Output size: [batch, 3, 32, 32]
+#        self.encoder = nn.Sequential(
+#            nn.Conv2d(3, 12, 4, stride=2, padding=1),            # [batch, 12, 16, 16]
+#            nn.ReLU(),
+#            nn.Conv2d(12, 24, 4, stride=2, padding=1),           # [batch, 24, 8, 8]
+#            nn.ReLU(),
+#			nn.Conv2d(24, 48, 4, stride=2, padding=1),           # [batch, 48, 4, 4]
+#            nn.ReLU(),
+## 			nn.Conv2d(48, 96, 4, stride=2, padding=1),           # [batch, 96, 2, 2]
+##             nn.ReLU(),
+#        )
+#        self.decoder = nn.Sequential(
+##             nn.ConvTranspose2d(96, 48, 4, stride=2, padding=1),  # [batch, 48, 4, 4]
+##             nn.ReLU(),
+#			nn.ConvTranspose2d(48, 24, 4, stride=2, padding=1),  # [batch, 24, 8, 8]
+#            nn.ReLU(),
+#			nn.ConvTranspose2d(24, 12, 4, stride=2, padding=1),  # [batch, 12, 16, 16]
+#            nn.ReLU(),
+#            nn.ConvTranspose2d(12, 3, 4, stride=2, padding=1),   # [batch, 3, 32, 32]
+#            nn.Sigmoid(),
+#        )
+#
+#    def forward(self, x):
+#        encoded = self.encoder(x)
+#        decoded = self.decoder(encoded)
+#        return encoded, decoded
 
+class AutoencoderBlinders(nn.Module):
+    def __init__(self, blinders):
+        super(AutoencoderBlinders, self).__init__()
+        self.blinders = blinders
+        self.encoder = nn.Sequential(
+            nn.Conv2d(6, 16, 3, padding=1),
+            nn.ReLU(),
+            nn.BatchNorm2d(16),
+
+            nn.Conv2d(16, 32, 3, padding=1),
+            nn.ReLU(),
+            nn.BatchNorm2d(32),
+
+            nn.Conv2d(32, 64, 3, padding=1),
+            nn.ReLU(),
+            nn.BatchNorm2d(64),
+
+            nn.Conv2d(64, 64, 3, padding=1),
+            nn.ReLU(),
+            nn.BatchNorm2d(64),
+
+            nn.Conv2d(64, 64, 3, padding=1),
+            nn.ReLU(),
+            nn.BatchNorm2d(64),
+
+            nn.Conv2d(64, 64, 3, padding=1),
+            nn.ReLU(),
+            nn.BatchNorm2d(64),
+
+            nn.Conv2d(64, 32, 3, padding=1),
+            nn.ReLU(),
+            nn.BatchNorm2d(32),
+
+            nn.Conv2d(32, 3, 3, padding=1)
+        )
+    
     def forward(self, x):
-        encoded = self.encoder(x)
-        decoded = self.decoder(encoded)
-        return encoded, decoded
+        noise = self.blinders(x)
+        x_input = torch.cat([x, noise], dim=1)
+        blinders = self.encoder(x_input)
+        x_t = torch.clamp(x + blinders, 0., 1.)
+        return x_t
 
 def train_step(model, train_loader, criterion, optimizer, epoch, device, scheduler, log_interval=10):
     model.train()
@@ -170,7 +213,6 @@ def train_model(model, trainset, out_path, batch_size=64, criterion_train=None, 
     start_epoch = 1
     best_train_loss = float("-inf")
     best_test_loss = float("-inf")
-
 
     # Resume if required
     if resume is not None:

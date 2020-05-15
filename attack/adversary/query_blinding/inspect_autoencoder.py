@@ -26,7 +26,7 @@ import attack.config as cfg
 import attack.utils.model as model_utils
 from attack import datasets
 
-from blind import Autoencoder
+from blind import AutoencoderBlinders
 import transforms as mytransforms
 
 use_cuda = torch.cuda.is_available()
@@ -46,7 +46,8 @@ def main():
 
     ckp_dir = params['ckp_dir']
     model_path = osp.join(ckp_dir, "checkpoint.blind.pth.tar")
-    auto_encoder = Autoencoder()
+    blinders = mytransforms.get_gaussian_noise(device=device, sigma=0.095)
+    auto_encoder = AutoencoderBlinders(blinders)
     if osp.isfile(model_path):
         print("=> loading checkpoint '{}'".format(model_path))
         checkpoint = torch.load(model_path)
@@ -61,8 +62,6 @@ def main():
 
     auto_encoder = auto_encoder.to(device)
 
-    blinders = mytransforms.get_random_gaussian_pt(device=device, max_sigma=0.095)
-
     dataset_name = params["dataset_name"]
     dataset = datasets.__dict__[dataset_name]
     testset = dataset(train=False, transform=transforms.ToTensor())
@@ -71,9 +70,8 @@ def main():
 
     for i, (image, label) in enumerate(test_loader):
         image = image.to(device)
-        image_b = blinders(image)
         with torch.no_grad():
-            _, image_t = auto_encoder(image_b)
+            image_t = auto_encoder(image)
         image = image[0].cpu().numpy().transpose([1, 2, 0])
         image_t = torch.clamp(image_t, 0., 1.)
         image_t = image_t[0].cpu().numpy().transpose([1, 2, 0])
