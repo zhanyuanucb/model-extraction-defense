@@ -9,7 +9,7 @@ import os.path as osp
 import pickle
 
 class MultiStepJDA:
-    def __init__(self, adversary_model, blackbox, mean, std, device, criterion=model_utils.soft_cross_entropy, blinders_fn=None eps=0.1, steps=1, momentum=0):
+    def __init__(self, adversary_model, blackbox, mean, std, device, criterion=model_utils.soft_cross_entropy, blinders_fn=None, eps=0.1, steps=1, momentum=0):
         self.adversary_model = adversary_model
         self.blackbox = blackbox
         self.blinders_fn = blinders_fn
@@ -33,12 +33,12 @@ class MultiStepJDA:
         loss.backward()
         jacobian = images.grad.cpu()
         images.requires_grad_(False)
-        conf = F.softmax(logits.detach(), dim=1) 
-        return jacobian, conf # Inspection
+        #conf = F.softmax(logits.detach(), dim=1) 
+        return jacobian
 
     def augment_step(self, images, labels):
         #images, labels = images.to(device), labels.to(device)
-        jacobian, conf = self.get_jacobian(images, labels)
+        jacobian = self.get_jacobian(images, labels)
         images = images.cpu()
         self.v = self.momentum * self.v + self.lam*torch.sign(jacobian)#.to(device)
         # Clip to valid pixel values
@@ -46,48 +46,29 @@ class MultiStepJDA:
         images = images * self.STD + self.MEAN
         images = torch.clamp(images, 0., 1.)
         images = (images - self.MEAN) / self.STD
-        return images, conf.cpu().numpy() # Inspection
+        return images
 
     def augment(self, dataloader):
         """ Multi-step augmentation
         """
         print("Start jocobian data augmentaion...")
         images_aug, labels_aug = [], []
-        is_advs, confs = [], [] # Inspection
         for images, labels in dataloader:
             self.reset_v(input_shape=images.shape)
             images, labels = images.to(self.device), labels.to(self.device)
-            if self.blinders_fn is not None:
-                images = self.blinders_fn(images)
 
-            for _ in range(self.steps):
-                images_t = Variable(images, requires_grad=True)
-                images_t, conf = self.augment_step(images_t, labels)
-                is_adv, y = self.blackbox(images_t)  # Inspection
-                images_aug.append(images_t.clone())
-                labels_aug.append(y.cpu().clone())
-                confs.append(conf) 
-                is_advs.append(is_adv)
-        return torch.cat(images_aug), torch.cat(labels_aug), np.concatenate(is_advs), np.concatenate(confs)
+            for i in range(self.steps):
+                if self.blinders_fn is not None:
+                    images = self.blinders_fn(images)
+                images = Variable(images, requires_grad=True)
+                images = self.augment_step(images, labels)
+                images = images.to(self.device)
+            images = images.cpu()
+            is_adv, y = self.blackbox(images)  # Inspection
+            images_aug.append(images.clone())
+            labels_aug.append(y.cpu().clone())
+        return torch.cat(images_aug), torch.cat(labels_aug)
     
     def __call__(self, dataloader):
-        images_aug, labels_aug, is_advs, confs = self.augment(dataloader) 
-        adv_confs_batch = [confs[i] for i in range(confs.shape[0]) if is_advs[i]]
-        batch_size = images_aug.size(0)
-
-        # Filter by confidence
-        #cond = [max(conf) <= 1. for conf in confs] # if don't apply filtering
-        cond = [max(conf) < 0.9 for conf in confs] 
-
-        # Randomly pick fraction of k samples
-        #k = 0.6
-        #indices = np.random.choice(batch_size, round(batch_size*k), replace=False)
-        #cond = [False for _ in range(batch_size)]
-        #for idx in indices:
-        #    cond[idx] = True
-
-        cleaned_images = torch.stack([images_aug[i] for i in range(batch_size) if cond[i]])
-        cleaned_labels = torch.stack([labels_aug[i] for i in range(batch_size) if cond[i]])
-        cleaned_is_advs = [is_advs[i] for i in range(batch_size) if cond[i]]
-        cleaned_confs = np.array([confs[i] for i in range(batch_size) if cond[i]])
-        return cleaned_images, cleaned_labels, adv_confs_batch
+        images_aug, labels_aug = self.augment(dataloader) 
+        return images_aug, labels_aug

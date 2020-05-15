@@ -127,13 +127,14 @@ params = {"model_name":"resnet18", ##
           "out_root":"/mydata/model-extraction/model-extraction-defense/attack/adversary/models/cifar10/", ##
           "batch_size":32,
           "eps":0.01,
-          "steps":1,
+          "steps":3,
           "phi":3, # Budget = (steps+1)**phi*len(transferset)
           "alt_t": None, # Alternate period of step size sign
-          "epochs":15, 
+          "epochs":10, 
           "momentum":0,
           "blackbox_dir":'/mydata/model-extraction/model-extraction-defense/attack/victim/models/cifar10/wrn28', ##
-          "blinders_dir":'/mydata/model-extraction/model-extraction-defense/attack/adversary/query_blinding/autoencoder_blind/phase2_', ##
+          #"blinders_dir":'/mydata/model-extraction/model-extraction-defense/attack/adversary/query_blinding/autoencoder_blind/phase2_', ##
+          "blinders_dir":None, ##
           "seedset_dir":"/mydata/model-extraction/model-extraction-defense/attack/adversary/models/cifar10", ##
           "testset_name":"CIFAR10", ##
           "optimizer_name":"adam",
@@ -171,7 +172,7 @@ MEAN, STD = cfg.NORMAL_PARAMS[modelfamily]
 
 # ----------- Setup Similarity Encoder
 blackbox_dir = params["blackbox_dir"]
-if params["use_detector"]:
+if blackbox_dir is not None:
     encoder_ckp = params["encoder_ckp"]
     encoder_margin = params["encoder_margin"]
     encoder_ckp = osp.join(encoder_ckp, encoder_arch_name, f"{testset_name}-margin-{encoder_margin}")
@@ -265,31 +266,30 @@ phi = params["phi"]
 alt_t = params["alt_t"]
 steps = params["steps"]
 batch_size = params["batch_size"]
-budget = (steps+1)**phi*len(substitute_set)
+#budget = (steps+1)**phi*len(substitute_set)
+budget = (phi+1)*len(substitute_set)
 checkpoint_suffix = 'budget{}'.format(budget)
 testloader = testset
 epochs = params["epochs"]
 num_workers = 10
-adv_confs = []
 train_loader = DataLoader(substitute_set, batch_size=batch_size, shuffle=True, num_workers=num_workers)
+aug_loader = DataLoader(substitute_set, batch_size=batch_size, shuffle=True, num_workers=num_workers)
 substitute_out_path = osp.join(out_root, f"substitute_set.pt")
-for p in range(phi):
+for p in range(1, phi+1):
     if alt_t: # Apply periodic step size
         adversary.JDA.lam *= (-1)**(p//alt_t)
-    images_aug, labels_aug, adv_confs_batch = adversary(train_loader)
+    images_aug, labels_aug = adversary(aug_loader)
+    nxt_aug_samples = [images_aug.clone(), labels_aug.clone()]
+    nxt_aug_set = ImageTensorSet(nxt_aug_samples)
+    aug_loader = DataLoader(nxt_aug_set, batch_size=batch_size, shuffle=True, num_workers=num_workers)
 
-    adv_confs.extend(adv_confs_batch) # Inspect
-    if images_aug.size(0) == 0:
-        print("No additional augmented images, so exit.")
-        break
-
-    images_sub = torch.cat([images_sub, images_aug])
-    labels_sub = torch.cat([labels_sub, labels_aug])
+    images_sub = torch.cat([images_sub, images_aug.clone()])
+    labels_sub = torch.cat([labels_sub, labels_aug.clone()])
     substitute_samples = [images_sub, labels_sub]
     torch.save(substitute_samples, substitute_out_path)
     print('=> substitute set ({} samples) written to: {}'.format(substitute_samples[0].size(0), substitute_out_path))
 
-    substitute_set = ImageTensorSet(substitute_samples, transform=blind_function)
+    substitute_set = ImageTensorSet(substitute_samples)
     print(f"Substitute training epoch {p}")
     print(f"Current size of the substitute set {len(substitute_set)}")
     _, train_loader = model_utils.train_model(model, substitute_set, ckp_out_root, batch_size=batch_size, epochs=epochs, testset=testloader, criterion_train=criterion_train,
@@ -301,8 +301,3 @@ params['num_pruned'] = budget-params['budget']
 params_out_path = osp.join(ckp_out_root, 'params_train.json')
 with open(params_out_path, 'w') as jf:
     json.dump(params, jf, indent=True)
-
-# Inspect
-confs_path = osp.join(ckp_out_root, 'adv_confs.np')
-with open(confs_path, 'wb') as file:
-    pickle.dump(adv_confs, file)
