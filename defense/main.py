@@ -36,14 +36,14 @@ params = {"model_name":"resnet18", ##
           "epochs":10, 
           "momentum":0,
           "blackbox_dir":'/mydata/model-extraction/model-extraction-defense/attack/victim/models/cifar10/wrn28', ##
-          "blinders_dir":'/mydata/model-extraction/model-extraction-defense/attack/adversary/query_blinding/autoencoder_blind/phase2_', ##
-          #"blinders_dir":None, ##
+          #"blinders_dir":'/mydata/model-extraction/model-extraction-defense/attack/adversary/query_blinding/autoencoder_blind/phase2_', ##
+          "blinders_dir":None, ##
           "seedset_dir":"/mydata/model-extraction/model-extraction-defense/attack/adversary/models/cifar10", ##
           "testset_name":"CIFAR10", ##
           "optimizer_name":"adam",
-          "use_detector": True,
           "encoder_arch_name": "simnet",
           "encoder_ckp":"/mydata/model-extraction/model-extraction-defense/defense/similarity_encoding/",
+          #"encoder_ckp":None,
           "encoder_margin":3.2,
           "k":10,
           "thresh":0.0397684188708663, ##
@@ -75,8 +75,8 @@ MEAN, STD = cfg.NORMAL_PARAMS[modelfamily]
 
 # ----------- Setup Similarity Encoder
 blackbox_dir = params["blackbox_dir"]
-if blackbox_dir is not None:
-    encoder_ckp = params["encoder_ckp"]
+encoder_ckp = params["encoder_ckp"]
+if encoder_ckp is not None:
     encoder_margin = params["encoder_margin"]
     encoder_ckp = osp.join(encoder_ckp, encoder_arch_name, f"{testset_name}-margin-{encoder_margin}")
     ckp = osp.join(encoder_ckp, f"checkpoint.sim-{encoder_margin}.pth.tar")
