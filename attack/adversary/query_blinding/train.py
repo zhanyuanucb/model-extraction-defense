@@ -75,7 +75,7 @@ class AutoEncoderBCELoss(nn.Module):
         return self.BCELoss(x_t, x)
 
 def main():
-    parser = argparse.ArgumentParser(description='Train similarity encoder')
+    parser = argparse.ArgumentParser(description='Train auto-encoder blinders')
     parser.add_argument('--out_dir', metavar='PATH', type=str,
                         help='Destination directory to store trained model', default="/mydata/model-extraction/model-extraction-defense/attack/adversary/query_blinding/autoencoder_blind")
     parser.add_argument('--ckp_dir', metavar='PATH', type=str,
