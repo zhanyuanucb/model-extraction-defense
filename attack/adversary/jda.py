@@ -56,10 +56,9 @@ class MultiStepJDA:
         for images, labels in dataloader:
             self.reset_v(input_shape=images.shape)
             images, labels = images.to(self.device), labels.to(self.device)
-
+            if self.blinders_fn is not None:
+                images = self.blinders_fn(images)
             for i in range(self.steps):
-                if self.blinders_fn is not None:
-                    images = self.blinders_fn(images)
                 images = Variable(images, requires_grad=True)
                 images = self.augment_step(images, labels)
                 images = images.to(self.device)
