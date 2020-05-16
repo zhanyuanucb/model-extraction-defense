@@ -7,3 +7,5 @@
 **/*.png
 **/*margin*
 **/params*
+**/*.log
+**/jup*

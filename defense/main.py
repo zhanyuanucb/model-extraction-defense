@@ -28,6 +28,8 @@ __status__ = "Development"
 def main():
     parser = argparse.ArgumentParser(description='Simulate model extraction')
     parser.add_argument("--model_name", metavar="TYPE", type=str, default="resnet18")
+    parser.add_argument("--device_id", metavar="TYPE", type=int, default=1)
+    parser.add_argument("--jid", metavar="TYPE", type=int, default=1)
     parser.add_argument("--num_classes", metavar="TYPE", type=int, default=10)
     parser.add_argument("--out_root", metavar="PATH", type=str,
                         default="/mydata/model-extraction/model-extraction-defense/attack/adversary/models/cifar10/")
@@ -58,13 +60,12 @@ def main():
     params = vars(args)
 
     # ------------ Start
-    use_cuda = torch.cuda.is_available()
-    device = torch.device("cuda:1" if use_cuda else "cpu")
-    if use_cuda:
-        print("GPU: {}".format(torch.cuda.get_device_name(0)))
+    #device = torch.device("cuda:1" if use_cuda else "cpu")
+    if params['device_id'] >= 0:
+        os.environ["CUDA_VISIBLE_DEVICES"] = str(params['device_id'])
+        device = torch.device('cuda')
     else:
-        print(device)
-    gpu_count = torch.cuda.device_count()
+        device = torch.device('cpu')
 
     params['created_on'] = str(datetime.now()).replace(' ', '_')[:19]
     created_on = params['created_on']
@@ -213,7 +214,15 @@ def main():
         json.dump(params, jf, indent=True)
 
     if params["params_search"]:
-        with open("./params_search.log", 'a') as log:
+        jid = params["jid"]
+        search_log_path = f"./params_search_{jid}.log.tsv"
+        if not osp.exists(search_log_path):
+            with open(search_log_path, 'w') as log:
+                columns = ["create_on", "best_test_acc"]
+                log.write('\t'.join(columns) + '\n')
+            print(f"Created log file at {search_log_path}")
+
+        with open(search_log_path, 'a') as log:
             log.write('\t'.join([created_on, str(best_test_acc)]) + '\n')
 
 if __name__ == '__main__':
