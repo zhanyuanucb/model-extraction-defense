@@ -9,3 +9,4 @@
 **/params*
 **/*.log
 **/jup*
+**/.ipynb*

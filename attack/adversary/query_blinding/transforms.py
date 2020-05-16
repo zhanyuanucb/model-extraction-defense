@@ -58,14 +58,14 @@ def get_random_rotate(device="cpu", max_deg=0.018):
 
 def get_random_translate(device="cpu", r=0.45):
     def translate_random(x):
-        translate = kornia.augmentation.RandomAffine(translate=(-r, r), return_transform=False)
+        translate = kornia.augmentation.RandomAffine(0, translate=(r, r), return_transform=False)
         x_t = translate(x)
         return x_t
     return translate_random
 
 def get_random_scale(device="cpu", r=0.17):
     def scale_random(x):
-        scale = kornia.augmentation.RandomAffine(scale=(1-r, 1+r), return_transform=False)
+        scale = kornia.augmentation.RandomAffine(0, scale=(1-r, 1+r), return_transform=False)
         x_t = scale(x)
         return x_t
     return scale_random
@@ -73,6 +73,6 @@ def get_random_scale(device="cpu", r=0.17):
 def get_random_crop(device="cpu", r=0.04):
     def crop_random(x):
         crop = kornia.augmentation.RandomResizedCrop(size=(32, 32), scale=(1-r, 1.), ratio=(1., 1.), return_transform=False)
-        x_t = scale(x)
+        x_t = crop(x)
         return x_t
     return crop_random

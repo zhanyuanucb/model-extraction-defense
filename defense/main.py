@@ -35,11 +35,11 @@ def main():
                         default="/mydata/model-extraction/model-extraction-defense/attack/adversary/models/cifar10/")
     parser.add_argument("--batch_size", metavar="TYPE", type=int, default=32)
     parser.add_argument("--eps", metavar="TYPE", type=float, help="JDA step size", default=0.01)
-    parser.add_argument("--steps", metavar="TYPE", type=int, help="number of JDA steps", default=5)
-    parser.add_argument("--phi", metavar="TYPE", type=int, help="number of extraction iterations", default=3)
+    parser.add_argument("--steps", metavar="TYPE", type=int, help="number of JDA steps", default=7)
+    parser.add_argument("--phi", metavar="TYPE", type=int, help="number of extraction iterations", default=6)
     parser.add_argument("--alt_t", metavar="TYPE", type=int, help="alternate period of step size sign", default=None)
     parser.add_argument("--epochs", metavar="TYPE", type=int, help="extraction training epochs", default=10)
-    parser.add_argument("--momentum", metavar="TYPE", type=float, help="multi-step JDA momentum", default=0.)
+    parser.add_argument("--momentum", metavar="TYPE", type=float, help="multi-step JDA momentum", default=0.7)
     parser.add_argument("--blackbox_dir", metavar="PATH", type=str,
                         default="/mydata/model-extraction/model-extraction-defense/attack/victim/models/cifar10/wrn28")
     parser.add_argument("--blinders_dir", metavar="PATH", type=str,
@@ -127,7 +127,7 @@ def main():
             blinders_noise_fn = blinders_transforms.get_gaussian_noise(device=device, sigma=0.095)
             auto_encoder = AutoencoderBlinders(blinders_noise_fn)
             print("=> Loading auto-encoder checkpoint '{}'".format(blinders_ckp))
-            checkpoint = torch.load(blinders_ckp)
+            checkpoint = torch.load(blinders_ckp, map_location=device)
             start_epoch = checkpoint['epoch']
             best_test_loss = checkpoint['best_loss']
             auto_encoder.load_state_dict(checkpoint['state_dict'])
@@ -138,8 +138,7 @@ def main():
         else:
             print("===> no checkpoint found at '{}'".format(blinders_ckp))
             print("===> Loading random transform query blinding...")
-            auto_encoder = eval(f"blinders_transforms.{blinder_dir}")(device=device)
-            exit(1)
+            auto_encoder = eval(f"blinders_transforms.{blinders_dir}")(device=device)
     else:
         auto_encoder = None
 
@@ -218,7 +217,7 @@ def main():
         search_log_path = f"./params_search_{jid}.log.tsv"
         if not osp.exists(search_log_path):
             with open(search_log_path, 'w') as log:
-                columns = ["create_on", "best_test_acc"]
+                columns = ["created_on", "best_test_acc"]
                 log.write('\t'.join(columns) + '\n')
             print(f"Created log file at {search_log_path}")
 
