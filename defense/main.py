@@ -199,6 +199,8 @@ def main():
         print('=> substitute set ({} samples) written to: {}'.format(substitute_samples[0].size(0), substitute_out_path))
 
         substitute_set = ImageTensorSet(substitute_samples)
+        #substitute_set = ImageTensorSet(seedset_samples) # baseline
+
         print(f"Substitute training epoch {p}")
         print(f"Current size of the substitute set {len(substitute_set)}")
         best_test_acc, train_loader = model_utils.train_model(model, substitute_set, ckp_out_root, batch_size=batch_size, epochs=epochs, testset=testloader, criterion_train=criterion_train,
@@ -212,7 +214,7 @@ def main():
 
     if params["params_search"]:
         with open("./params_search.log", 'a') as log:
-            log.write('\t'.join([created_on, str(best_test_acc)] + '\n'))
+            log.write('\t'.join([created_on, str(best_test_acc)]) + '\n')
 
 if __name__ == '__main__':
     main()
