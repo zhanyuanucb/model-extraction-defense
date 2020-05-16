@@ -53,8 +53,7 @@ def main():
     parser.add_argument("--k", metavar="TYPE", type=int, default=10)
     parser.add_argument("--thresh", metavar="TYPE", type=float, help="detector threshold", default=0.0397684188708663)
     parser.add_argument("--log_suffix", metavar="TYPE", type=str, default="testing")
-    parser.add_argument("--log_dir", metavar="PATH", type=str,
-                        default="./")
+    parser.add_argument("--params_search", action="store_true")
     args = parser.parse_args()
     params = vars(args)
 
@@ -69,11 +68,16 @@ def main():
 
     params['created_on'] = str(datetime.now()).replace(' ', '_')[:19]
     created_on = params['created_on']
+    out_root = params["out_root"]
+
+    ckp_out_root = osp.join(out_root, created_on)
+    if not osp.exists(ckp_out_root):
+        os.mkdir(ckp_out_root)
     # ----------- Initialize Detector
     k = params["k"]
     thresh = params["thresh"]
     log_suffix = params["log_suffix"]
-    log_dir = params["log_dir"]
+    log_dir = ckp_out_root
     testset_name = params["testset_name"]
     encoder_arch_name = params["encoder_arch_name"]
     modelfamily = datasets.dataset_to_modelfamily[testset_name]
@@ -81,7 +85,7 @@ def main():
     encoder = zoo.get_net(encoder_arch_name, modelfamily, num_classes=num_classes)
     MEAN, STD = cfg.NORMAL_PARAMS[modelfamily]
 
-    # ----------- Setup Similarity Encoder
+    # setup similarity encoder
     blackbox_dir = params["blackbox_dir"]
     encoder_ckp = params["encoder_ckp"]
     if encoder_ckp is not None:
@@ -109,12 +113,6 @@ def main():
 
     # ----------- Initialize Adversary
     nworkers = 10
-    out_root = params["out_root"]
-
-    ckp_out_root = osp.join(out_root, created_on)
-    if not osp.exists(ckp_out_root):
-        os.mkdir(ckp_out_root)
-
     # attack parameters
     eps = params["eps"]
     steps= params["steps"]
@@ -123,10 +121,10 @@ def main():
     # set up query blinding
     blinders_dir = params["blinders_dir"]
     if blinders_dir is not None:
-        blinders_noise_fn = blinders_transforms.get_gaussian_noise(device=device, sigma=0.095)
-        auto_encoder = AutoencoderBlinders(blinders_noise_fn)
         blinders_ckp = osp.join(blinders_dir, "checkpoint.blind.pth.tar")
         if osp.isfile(blinders_ckp):
+            blinders_noise_fn = blinders_transforms.get_gaussian_noise(device=device, sigma=0.095)
+            auto_encoder = AutoencoderBlinders(blinders_noise_fn)
             print("=> Loading auto-encoder checkpoint '{}'".format(blinders_ckp))
             checkpoint = torch.load(blinders_ckp)
             start_epoch = checkpoint['epoch']
@@ -134,11 +132,13 @@ def main():
             auto_encoder.load_state_dict(checkpoint['state_dict'])
             print("===> loaded checkpoint (epoch {})".format(checkpoint['epoch']))
             print(f"===> Best val loss: {best_test_loss}")
+            auto_encoder = auto_encoder.to(device)
+            auto_encoder.eval()
         else:
             print("===> no checkpoint found at '{}'".format(blinders_ckp))
+            print("===> Loading random transform query blinding...")
+            auto_encoder = eval(f"blinders_transforms.{blinder_dir}")(device=device)
             exit(1)
-        auto_encoder = auto_encoder.to(device)
-        auto_encoder.eval()
     else:
         auto_encoder = None
 
@@ -177,7 +177,7 @@ def main():
     steps = params["steps"]
     batch_size = params["batch_size"]
     budget = (phi+1)*len(substitute_set)
-    checkpoint_suffix = 'budget{}'.format(budget)
+    checkpoint_suffix = '.budget{}'.format(budget)
     testloader = testset
     epochs = params["epochs"]
     num_workers = 10
@@ -201,15 +201,18 @@ def main():
         substitute_set = ImageTensorSet(substitute_samples)
         print(f"Substitute training epoch {p}")
         print(f"Current size of the substitute set {len(substitute_set)}")
-        _, train_loader = model_utils.train_model(model, substitute_set, ckp_out_root, batch_size=batch_size, epochs=epochs, testset=testloader, criterion_train=criterion_train,
+        best_test_acc, train_loader = model_utils.train_model(model, substitute_set, ckp_out_root, batch_size=batch_size, epochs=epochs, testset=testloader, criterion_train=criterion_train,
                                                   checkpoint_suffix=checkpoint_suffix, device=device, optimizer=optimizer)
 
     # Store arguments
     params['budget'] = images_sub.size(0)
-    params['num_pruned'] = budget-params['budget']
     params_out_path = osp.join(ckp_out_root, 'params_train.json')
     with open(params_out_path, 'w') as jf:
         json.dump(params, jf, indent=True)
+
+    if params["params_search"]:
+        with open("./params_search.log", 'a') as log:
+            log.write('\t'.join([created_on, str(best_test_acc)] + '\n'))
 
 if __name__ == '__main__':
     main()

@@ -272,4 +272,4 @@ def train_model(model, trainset, out_path, batch_size=64, criterion_train=None, 
                 af.write(f'Validation accuracy reaches {callback}, so stop training.\n')
             return model, train_loader
 
-    return model, train_loader
+    return best_test_acc, train_loader
