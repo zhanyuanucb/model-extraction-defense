@@ -15,3 +15,7 @@
 ## 0. Baseline: 54.14%
 #python main.py --phi=1 \
 #               --epochs=20
+
+# OOD attack
+python main.py --phi=1 \
+               --random_adv

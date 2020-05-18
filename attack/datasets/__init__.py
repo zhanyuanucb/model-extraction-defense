@@ -34,6 +34,7 @@ dataset_to_modelfamily = {
     'Indoor67': 'imagenet',
     'Diabetic5': 'imagenet',
     'ImageNet1k': 'imagenet',
+    'ImageNet32': 'imagenet',
 }
 
 # Transforms

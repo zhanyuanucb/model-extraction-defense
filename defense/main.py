@@ -207,8 +207,8 @@ def main():
             substitute_samples = [images_sub, labels_sub]
             substitute_set = ImageTensorSet(substitute_samples)
 
-        torch.save(substitute_samples, substitute_out_path)
-        print('=> substitute set ({} samples) written to: {}'.format(substitute_samples[0].size(0), substitute_out_path))
+            torch.save(substitute_samples, substitute_out_path)
+            print('=> substitute set ({} samples) written to: {}'.format(substitute_samples[0].size(0), substitute_out_path))
 
         print(f"Substitute training epoch {p}")
         print(f"Current size of the substitute set {len(substitute_set)}")
