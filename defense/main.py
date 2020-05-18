@@ -44,6 +44,8 @@ def main():
                         default="/mydata/model-extraction/model-extraction-defense/attack/victim/models/cifar10/wrn28")
     parser.add_argument("--blinders_dir", metavar="PATH", type=str,
                         default=None)
+    parser.add_argument("--r", metavar="PATH", type=float, help="params of random transform blinders",
+                        default=None)
     parser.add_argument("--seedset_dir", metavar="PATH", type=str,
                         default="/mydata/model-extraction/model-extraction-defense/attack/adversary/models/cifar10")
     parser.add_argument("--testset_name", metavar="TYPE", type=str, default="CIFAR10")
@@ -56,6 +58,7 @@ def main():
     parser.add_argument("--thresh", metavar="TYPE", type=float, help="detector threshold", default=0.0397684188708663)
     parser.add_argument("--log_suffix", metavar="TYPE", type=str, default="testing")
     parser.add_argument("--params_search", action="store_true")
+    parser.add_argument("--random_adv", action="store_true")
     args = parser.parse_args()
     params = vars(args)
 
@@ -136,9 +139,10 @@ def main():
             auto_encoder = auto_encoder.to(device)
             auto_encoder.eval()
         else:
+            r = params['r']
             print("===> no checkpoint found at '{}'".format(blinders_ckp))
             print("===> Loading random transform query blinding...")
-            auto_encoder = eval(f"blinders_transforms.{blinders_dir}")(device=device)
+            auto_encoder = eval(f"blinders_transforms.{blinders_dir}")(device=device, r=r)
     else:
         auto_encoder = None
 
@@ -172,6 +176,7 @@ def main():
     criterion_train = model_utils.soft_cross_entropy
 
     #--------- Extraction
+    random_adv = params["random_adv"]
     phi = params["phi"]
     alt_t = params["alt_t"]
     steps = params["steps"]
@@ -181,25 +186,29 @@ def main():
     testloader = testset
     epochs = params["epochs"]
     num_workers = 10
-    train_loader = DataLoader(substitute_set, batch_size=batch_size, shuffle=True, num_workers=num_workers)
+    #train_loader = DataLoader(substitute_set, batch_size=batch_size, shuffle=True, num_workers=num_workers)
     aug_loader = DataLoader(substitute_set, batch_size=batch_size, shuffle=True, num_workers=num_workers)
     substitute_out_path = osp.join(out_root, f"substitute_set.pt")
     for p in range(1, phi+1):
         if alt_t: # Apply periodic step size
             adversary.JDA.lam *= (-1)**(p//alt_t)
-        images_aug, labels_aug = adversary(aug_loader)
-        nxt_aug_samples = [images_aug.clone(), labels_aug.clone()]
-        nxt_aug_set = ImageTensorSet(nxt_aug_samples)
-        aug_loader = DataLoader(nxt_aug_set, batch_size=batch_size, shuffle=True, num_workers=num_workers)
 
-        images_sub = torch.cat([images_sub, images_aug.clone()])
-        labels_sub = torch.cat([labels_sub, labels_aug.clone()])
-        substitute_samples = [images_sub, labels_sub]
+        if random_adv:
+            assert phi == 1, "Random Adversary only needs 1 extraction epoch"
+            substitute_set = ImageTensorSet(seedset_samples) # baseline
+        else:
+            images_aug, labels_aug = adversary(aug_loader)
+            nxt_aug_samples = [images_aug.clone(), labels_aug.clone()]
+            nxt_aug_set = ImageTensorSet(nxt_aug_samples)
+            aug_loader = DataLoader(nxt_aug_set, batch_size=batch_size, shuffle=True, num_workers=num_workers)
+
+            images_sub = torch.cat([images_sub, images_aug.clone()])
+            labels_sub = torch.cat([labels_sub, labels_aug.clone()])
+            substitute_samples = [images_sub, labels_sub]
+            substitute_set = ImageTensorSet(substitute_samples)
+
         torch.save(substitute_samples, substitute_out_path)
         print('=> substitute set ({} samples) written to: {}'.format(substitute_samples[0].size(0), substitute_out_path))
-
-        substitute_set = ImageTensorSet(substitute_samples)
-        #substitute_set = ImageTensorSet(seedset_samples) # baseline
 
         print(f"Substitute training epoch {p}")
         print(f"Current size of the substitute set {len(substitute_set)}")
