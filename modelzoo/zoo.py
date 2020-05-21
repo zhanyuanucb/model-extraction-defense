@@ -10,7 +10,9 @@ import modelzoo.imagenet
 
 
 def get_net(modelname, modeltype, pretrained=None, **kwargs):
-    assert modeltype in ('mnist', 'cifar', 'imagenet')
+    assert modeltype in ('mnist', 'cifar', 'imagenet', 'imagenet32')
+    if modeltype == "imagenet32":
+        modeltype = 'cifar'
     if pretrained and pretrained is not None:
         return get_pretrainednet(modelname, modeltype, pretrained, **kwargs)
     else:

@@ -10,8 +10,20 @@
 #                  --seedset_dir=/mydata/model-extraction/data/cifar10_balanced_subset5000 \
 #                  --batch_size=128
 
+#python getseed.py /mydata/model-extraction/model-extraction-defense/attack/victim/models/cifar10/wrn28 \
+#                  --out_dir /mydata/model-extraction/model-extraction-defense/attack/adversary/models/cifar10 \
+#                  --seedset_name=CIFAR10 \
+#                  --seedset_dir=/mydata/model-extraction/data/imagenet32_subset35000 \
+#                  --batch_size=128
+
+#python getseed.py /mydata/model-extraction/model-extraction-defense/attack/victim/models/cifar10/wrn28 \
+#                  --out_dir /mydata/model-extraction/model-extraction-defense/attack/adversary/models/cifar10 \
+#                  --seedset_name=CIFAR10 \
+#                  --seedset_dir=/mydata/model-extraction/data/imagenet32_subset50000 \
+#                  --batch_size=128
+
 python getseed.py /mydata/model-extraction/model-extraction-defense/attack/victim/models/cifar10/wrn28 \
                   --out_dir /mydata/model-extraction/model-extraction-defense/attack/adversary/models/cifar10 \
                   --seedset_name=CIFAR10 \
-                  --seedset_dir=/mydata/model-extraction/data/imagenet32_subset35000 \
+                  --seedset_dir=/mydata/model-extraction/data/imagenet32_subset100000 \
                   --batch_size=128

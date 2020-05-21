@@ -52,6 +52,7 @@ def main():
     parser.add_argument('--optimizer', type=str, help='Optimizer', default="adam")
     parser.add_argument('--lr', type=float, default=0.01, metavar='LR',
                         help='learning rate (default: 0.1)')
+    parser.add_argument('--num_classes', type=int, help='number of classes', default=10)
     parser.add_argument('--momentum', type=float, default=0.9, metavar='M',
                         help='SGD momentum (default: 0.5)')
     parser.add_argument('--log-interval', type=int, default=100, metavar='N',
@@ -88,8 +89,8 @@ def main():
     test_transform = datasets.modelfamily_to_transforms[modelfamily]['test']
     trainset = dataset(train=True, transform=train_transform)
     testset = dataset(train=False, transform=test_transform)
-    num_classes = len(trainset.classes)
-    params['num_classes'] = num_classes
+    #num_classes = len(trainset.classes)
+    num_classes = params['num_classes']
 
     if params['train_subset'] is not None:
         idxs = np.arange(len(trainset))

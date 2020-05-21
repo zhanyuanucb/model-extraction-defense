@@ -13,9 +13,16 @@
 # New logging since May 16
 # ----------- Searching for optimal attack parameters
 ## 0. Baseline: 54.14%
-#python main.py --phi=1 \
+#CUDA_VISIBLE_DEVICES=0 python main.py --phi=1 \
+#               --log_suffix=baseline
 #               --epochs=20
+#               --random_adv
+
+#CUDA_VISIBLE_DEVICES=0 python main.py --model_name=wrn28 \
+#                                      --log_suffix=max_query \
+#                                      --phi=19 \
 
 # OOD attack
-python main.py --phi=1 \
-               --random_adv
+#CUDA_VISIBLE_DEVICES=0 python main.py --model_name=wrn28 \
+#                                      --phi=1 \
+#                                      --random_adv

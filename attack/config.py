@@ -1,16 +1,24 @@
 import os
 import os.path as osp
 from os.path import dirname, abspath
+import numpy as np
+import random
+import torch
 
 DEFAULT_SEED = 42
 DS_SEED = 123  # uses this seed when splitting datasets
+
+random.seed(DEFAULT_SEED)
+np.random.seed(DEFAULT_SEED)
+torch.manual_seed(DEFAULT_SEED)
+torch.cuda.manual_seed(DEFAULT_SEED)
+torch.backends.cudnn.deterministic = True
 
 # -------------- Paths
 CONFIG_PATH = abspath(__file__)
 SRC_ROOT = dirname(CONFIG_PATH)
 PROJECT_ROOT = dirname(SRC_ROOT)
 CACHE_ROOT = osp.join(SRC_ROOT, 'cache')
-#DATASET_ROOT = osp.join(PROJECT_ROOT, 'data')
 DATASET_ROOT = "/data"
 CIFAR10_DATASET_TRAIN = osp.join(DATASET_ROOT, 'cifar10/training.pt')
 dataset2dir = {"CIFAR10": {"train":osp.join(DATASET_ROOT, 'cifar10/training.pt'),

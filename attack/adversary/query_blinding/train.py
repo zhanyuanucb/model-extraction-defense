@@ -88,6 +88,7 @@ def main():
     parser.add_argument('--train_epochs', metavar='TYPE', type=int, help='Training epochs', default=10)
     parser.add_argument('--optimizer_name', metavar='TYPE', type=str, help='Optimizer name', default="adam")
     parser.add_argument('--ckpt_suffix', metavar='TYPE', type=str, default="")
+    parser.add_argument('--folder_suffix', metavar='TYPE', type=str, default="")
     parser.add_argument('--resume', metavar="PATH", type=str, default=None)
     parser.add_argument('--load_phase1', action='store_true')
     parser.add_argument('--attempt', metavar='TYPE', type=int)
@@ -192,13 +193,14 @@ def main():
 
     # -------------------- Phase 2
     attempt = params["attempt"]
+    folder_suffix = params["folder_suffix"]
     print("Start phase 2 training...")
     batch_size = params["batch_size"]
     num_workers = params["nworkers"]
     lr = params["lr"]
     optimizer = model_utils.get_optimizer(auto_encoder.parameters(), optimizer_name, lr=lr)
     criterion = blindloss
-    out_path = osp.join(out_root, f"phase2_{attempt}")
+    out_path = osp.join(out_root, f"phase2_{folder_suffix}_{attempt}")
     os_utils.create_dir(out_path)
     blinders.train_model(auto_encoder, trainset, out_path, batch_size=batch_size, epochs=train_epochs, testset=valset,
                             criterion_train=criterion, criterion_test=criterion, resume=resume,
