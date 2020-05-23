@@ -23,6 +23,8 @@
 #                                      --phi=19 \
 
 # OOD attack
-#CUDA_VISIBLE_DEVICES=0 python main.py --model_name=wrn28 \
-#                                      --phi=1 \
-#                                      --random_adv
+CUDA_VISIBLE_DEVICES=0 python main.py --model_name=wrn28 \
+                                      --phi=1 \
+                                      --epochs=50 \
+                                      --log_suffix=cinic_maxquery\
+                                      --random_adv

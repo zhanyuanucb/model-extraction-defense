@@ -8,6 +8,7 @@ import sys
 sys.path.append('/mydata/model-extraction/model-extraction-defense/')
 from attack.datasets.imagenet1k import ImageNet1k
 from attack.datasets.imagenet32 import ImageNet32
+from attack.datasets.cinic10 import CINIC10
 #from knockoff.datasets.indoor67 import Indoor67
 from attack.datasets.mnistlike import MNIST, KMNIST, EMNIST, EMNISTLetters, FashionMNIST
 #from knockoff.datasets.tinyimagenet200 import TinyImageNet200
@@ -36,6 +37,9 @@ dataset_to_modelfamily = {
     'Diabetic5': 'imagenet',
     'ImageNet1k': 'imagenet',
     'ImageNet32': 'imagenet32',
+
+    # CINIC10
+    'CINIC10': "cinic10"
 }
 
 # Transforms
@@ -101,6 +105,20 @@ modelfamily_to_transforms = {
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                  std=[0.229, 0.224, 0.225]),
+        ])
+    },
+
+    'cinic10': {
+        'train': transforms.Compose([
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.47889522, 0.47227842, 0.43047404],
+                                 std=[0.24205776, 0.23828046, 0.25874835])
+        ]),
+        'test': transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.47889522, 0.47227842, 0.43047404],
+                                 std=[0.24205776, 0.23828046, 0.25874835])
         ])
     }
 }
