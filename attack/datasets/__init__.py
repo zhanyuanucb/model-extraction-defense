@@ -110,7 +110,12 @@ modelfamily_to_transforms = {
 
     'cinic10': {
         'train': transforms.Compose([
-            transforms.RandomHorizontalFlip(),
+            transforms.RandomChoice([transforms.RandomHorizontalFlip(),
+                                     transforms.RandomRotation(45),
+                                     transforms.RandomAffine(0, translate=(0.45, 0.45)),
+                                     transforms.ColorJitter(brightness=0.5),
+                                     transforms.ColorJitter(contrast=0.55)
+                                     ]),
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.47889522, 0.47227842, 0.43047404],
                                  std=[0.24205776, 0.23828046, 0.25874835])

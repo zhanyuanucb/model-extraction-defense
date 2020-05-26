@@ -36,7 +36,6 @@ def main():
     parser.add_argument("--batch_size", metavar="TYPE", type=int, default=32)
     parser.add_argument("--eps", metavar="TYPE", type=float, help="JDA step size", default=0.01)
     parser.add_argument("--steps", metavar="TYPE", type=int, help="number of JDA steps", default=7)
-    parser.add_argument("--delta_step", metavar="TYPE", type=int, help="number of JDA steps", default=0)
     parser.add_argument("--phi", metavar="TYPE", type=int, help="number of extraction iterations", default=6)
     parser.add_argument("--alt_t", metavar="TYPE", type=int, help="alternate period of step size sign", default=None)
     parser.add_argument("--epochs", metavar="TYPE", type=int, help="extraction training epochs", default=10)
@@ -47,8 +46,7 @@ def main():
                         default=None)
     parser.add_argument("--r", metavar="PATH", type=float, help="params of random transform blinders",
                         default=None)
-    parser.add_argument("--seedset_dir", metavar="PATH", type=str,
-                        default="/mydata/model-extraction/model-extraction-defense/attack/adversary/models/cifar10")
+    parser.add_argument("--trainset_name", metavar="TYPE", type=str, default="CINIC10")
     parser.add_argument("--testset_name", metavar="TYPE", type=str, default="CIFAR10")
     parser.add_argument("--optimizer_name", metavar="TYPE", type=str, default="adam")
     parser.add_argument("--encoder_arch_name", metavar="TYPE", type=str, default="simnet")
@@ -60,7 +58,6 @@ def main():
     parser.add_argument("--log_suffix", metavar="TYPE", type=str, default="testing")
     parser.add_argument("--params_search", action="store_true")
     parser.add_argument("--random_adv", action="store_true")
-    parser.add_argument("--return_conf_max", action="store_true")
     args = parser.parse_args()
     params = vars(args)
 
@@ -84,6 +81,7 @@ def main():
     thresh = params["thresh"]
     log_suffix = params["log_suffix"]
     log_dir = ckp_out_root
+    trainset_name = params["trainset_name"]
     testset_name = params["testset_name"]
     encoder_arch_name = params["encoder_arch_name"]
     modelfamily = datasets.dataset_to_modelfamily[testset_name]
@@ -94,7 +92,6 @@ def main():
     # setup similarity encoder
     blackbox_dir = params["blackbox_dir"]
     encoder_ckp = params["encoder_ckp"]
-    return_conf_max = params["return_conf_max"]
     if encoder_ckp is not None:
         encoder_margin = params["encoder_margin"]
         encoder_ckp = osp.join(encoder_ckp, encoder_arch_name, f"{testset_name}-margin-{encoder_margin}")
@@ -107,10 +104,10 @@ def main():
 
         encoder = encoder.to(device)
 
-        blackbox = Detector(k, thresh, encoder, MEAN, STD, log_suffix=log_suffix, log_dir=log_dir, return_max_conf=return_conf_max)
+        blackbox = Detector(k, thresh, encoder, MEAN, STD, log_suffix=log_suffix, log_dir=log_dir)
         blackbox.init(blackbox_dir, device, time=created_on)
     else:
-        blackbox = Blackbox.from_modeldir(blackbox_dir, device, return_max_conf=return_conf_max)
+        blackbox = Blackbox.from_modeldir(blackbox_dir, device)
 
     # ----------- Initialize adversary model
     model_name = params["model_name"]
@@ -124,7 +121,6 @@ def main():
     eps = params["eps"]
     steps= params["steps"]
     momentum= params["momentum"]
-    delta_step = params["delta_step"]
 
     # set up query blinding
     blinders_dir = params["blinders_dir"]
@@ -150,18 +146,27 @@ def main():
     else:
         auto_encoder = None
 
-    adversary = MultiStepJDA(model, blackbox, MEAN, STD, device, blinders_fn=auto_encoder, 
-                             eps=eps, steps=steps, momentum=momentum, delta_step=delta_step, return_conf_max=return_conf_max) 
+    adversary = MultiStepJDA(model, blackbox, MEAN, STD, device, blinders_fn=auto_encoder, eps=eps, steps=steps, momentum=momentum) 
 
-    # ----------- Set up seedset
-    seedset_path = osp.join(params["seedset_dir"], 'seed.pt')
-    images_sub, labels_sub = torch.load(seedset_path)
-    seedset_samples = [images_sub, labels_sub]
-    num_classes = seedset_samples[1][0].size(0)
-    print('=> found transfer set with {} samples, {} classes'.format(seedset_samples[0].size(0), num_classes))
+#    # ----------- Set up seedset
+#    seedset_path = osp.join(params["seedset_dir"], 'seed.pt')
+#    images_sub, labels_sub = torch.load(seedset_path)
+#    seedset_samples = [images_sub, labels_sub]
+#    num_classes = seedset_samples[1][0].size(0)
+#    print('=> found transfer set with {} samples, {} classes'.format(seedset_samples[0].size(0), num_classes))
+
+    # ----------- Set up trainset
+    valid_datasets = datasets.__dict__.keys()
+    train_transform = datasets.modelfamily_to_transforms[modelfamily]['train'] # test2 has no normalization
+    if trainset_name not in valid_datasets:
+        raise ValueError('Dataset not found. Valid arguments = {}'.format(valid_datasets))
+    dataset = datasets.__dict__[trainset_name]
+    trainset = dataset(train=True, transform=train_transform)
+
+    if len(testset.classes) != num_classes:
+        raise ValueError('# Transfer classes ({}) != # Testset classes ({})'.format(num_classes, len(testset.classes)))
 
     # ----------- Set up testset
-    valid_datasets = datasets.__dict__.keys()
     test_transform = datasets.modelfamily_to_transforms[modelfamily]['test'] # test2 has no normalization
     if testset_name not in valid_datasets:
         raise ValueError('Dataset not found. Valid arguments = {}'.format(valid_datasets))
@@ -172,8 +177,7 @@ def main():
         raise ValueError('# Transfer classes ({}) != # Testset classes ({})'.format(num_classes, len(testset.classes)))
 
     # ----------- Set up seed images
-    substitute_set = ImageTensorSet(seedset_samples)
-    print('=> Training at budget = {}'.format(len(substitute_set)))
+    print('=> Training at budget = {}'.format(len(trainset)))
 
     optimizer_name = params["optimizer_name"]
     optimizer = model_utils.get_optimizer(model.parameters(), optimizer_name)
@@ -189,7 +193,6 @@ def main():
     budget = (phi+1)*len(substitute_set)
     checkpoint_suffix = '.budget{}'.format(budget)
     testloader = testset
-    conf_list = []
     epochs = params["epochs"]
     num_workers = 10
     #train_loader = DataLoader(substitute_set, batch_size=batch_size, shuffle=True, num_workers=num_workers)
@@ -203,11 +206,7 @@ def main():
             assert phi == 1, "Random Adversary only needs 1 extraction epoch"
             substitute_set = ImageTensorSet(seedset_samples) # baseline
         else:
-            if return_conf_max:
-                images_aug, labels_aug, conf_max = adversary(aug_loader)
-                conf_list.append(conf_max.clone())
-            else:
-                images_aug, labels_aug = adversary(aug_loader)
+            images_aug, labels_aug = adversary(aug_loader)
             nxt_aug_samples = [images_aug.clone(), labels_aug.clone()]
             nxt_aug_set = ImageTensorSet(nxt_aug_samples)
             aug_loader = DataLoader(nxt_aug_set, batch_size=batch_size, shuffle=True, num_workers=num_workers)
@@ -242,12 +241,6 @@ def main():
 
         with open(search_log_path, 'a') as log:
             log.write('\t'.join([created_on, str(best_test_acc)]) + '\n')
-
-    conf_list = torch.cat(conf_list).numpy()
-    plt.hist(conf_list, bins=50, density=True)
-    plt.title(f"Histogram of blackbox prediction confidence ({model_name})")
-    plt.savefig(osp.join(ckp_out_root, 'conf_hist.png'))
-    torch.save(conf_list, osp.join(ckp_out_root, 'conf_list.pkl'))
 
 if __name__ == '__main__':
     main()

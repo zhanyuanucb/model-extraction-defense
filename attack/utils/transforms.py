@@ -52,8 +52,11 @@ class RandomTransforms:
         elif modelfamily == "mnist":
             self.normalize = transforms.Normalize(mean=cfg.MNIST_MEAN,
                                              std=cfg.MNIST_STD)
-
             self.size = 28
+        elif modelfamily == "cinic10":
+            self.normalize = transforms.Normalize(mean=cfg.CINIC_MEAN,
+                                             std=cfg.CINIC_STD)
+            self.size = 32
         else:
             raise ValueError
         self.rotate_r = rotate_r

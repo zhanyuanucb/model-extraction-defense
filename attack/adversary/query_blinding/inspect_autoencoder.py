@@ -47,7 +47,7 @@ def main():
 
     ckp_dir = params['ckp_dir']
     model_path = osp.join(ckp_dir, "checkpoint.blind.pth.tar")
-    blinders_fn = mytransforms.get_gaussian_noise(device=device, sigma=0.095)
+    blinders_fn = mytransforms.get_gaussian_noise(device=device, r=0.095)
     auto_encoder = AutoencoderBlinders(blinders_fn)
     if osp.isfile(model_path):
         print("=> loading checkpoint '{}'".format(model_path))

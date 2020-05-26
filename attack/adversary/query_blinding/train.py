@@ -13,6 +13,7 @@ from attack import datasets
 import modelzoo.zoo as zoo
 import attack.utils.model as model_utils
 import attack.utils.utils as os_utils
+import attack.utils.transforms as transform_utils
 import attack.config as cfg
 import blinders
 import transforms as mytransforms
@@ -91,7 +92,7 @@ def main():
     parser.add_argument('--folder_suffix', metavar='TYPE', type=str, default="")
     parser.add_argument('--resume', metavar="PATH", type=str, default=None)
     parser.add_argument('--load_phase1', action='store_true')
-    parser.add_argument('--attempt', metavar='TYPE', type=int)
+    parser.add_argument('--attempt', metavar='TYPE', type=int, default=0)
 
     # ----------- Other params
     parser.add_argument('-w', '--nworkers', metavar='N', type=int, help='# Worker processes to load data', default=10)
@@ -101,7 +102,7 @@ def main():
     out_root = params['out_dir']
     #torch.manual_seed(cfg.DEFAULT_SEED)
     use_cuda = torch.cuda.is_available()
-    device = torch.device("cuda:1" if use_cuda else "cpu")
+    device = torch.device("cuda:0" if use_cuda else "cpu")
 
     # ----------- Set up dataset
     dataset_name = params['dataset_name']
@@ -109,10 +110,13 @@ def main():
     if dataset_name not in valid_datasets:
         raise ValueError('Dataset not found. Valid arguments = {}'.format(valid_datasets))
     modelfamily = datasets.dataset_to_modelfamily[dataset_name]
-    train_transform = datasets.modelfamily_to_transforms[modelfamily]['test2']
-    test_transform = datasets.modelfamily_to_transforms[modelfamily]['test2']
-    #random_transform = transform_utils.RandomTransforms(modelfamily=modelfamily)
-    trainset = datasets.__dict__[dataset_name](train=True, transform=tvtransforms.ToTensor()) # Augment data while training
+    #train_transform = datasets.modelfamily_to_transforms[modelfamily]['test']
+    #test_transform = datasets.modelfamily_to_transforms[modelfamily]['test']
+    random_transform = transform_utils.RandomTransforms(modelfamily=modelfamily, normal=False,
+                                                        rotate_r=90, translate_r=0.45, scale_r=0.7,
+                                                        crop_r=0.5, bright_r=0.6, contrast_r=0.55,
+                                                        unif_r=0.2, norm_std=1e-3)
+    trainset = datasets.__dict__[dataset_name](train=True, transform=random_transform) # Augment data while training
     valset = datasets.__dict__[dataset_name](train=False, transform=tvtransforms.ToTensor())
 
     # ------------ Set up based classifier
@@ -141,7 +145,7 @@ def main():
     # ------------
 
     # ------------ Set up Auto-encoder
-    blinders_fn = mytransforms.get_gaussian_noise(device=device, sigma=0.095)
+    blinders_fn = mytransforms.get_gaussian_noise(device=device, r=0.095)
     auto_encoder = blinders.AutoencoderBlinders(blinders_fn)
     auto_encoder = auto_encoder.to(device)
     # ------------

@@ -26,19 +26,19 @@ train_loader = DataLoader(trainset, batch_size=batch_size, shuffle=True, num_wor
 test_loader = DataLoader(testset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
 
 images_train, labels_train = [], []
+out_dir = osp.join(cfg.DATASET_ROOT, "cifar10/training.pt")
 for images, targets in train_loader:
-    out_dir = osp.join(cfg.DATASET_ROOT, "cifar10/training.pt")
     images_train.append(images)
     labels_train.append(targets)
-    train_pt = [torch.cat(images_train).permute(0, 2, 3, 1), torch.cat(labels_train)]
+train_pt = [torch.cat(images_train).permute(0, 2, 3, 1), torch.cat(labels_train)]
 torch.save(train_pt, out_dir)
 print(f"Save {train_pt[0].size(0)} images to {out_dir}")
 
 images_test, labels_test = [], []
+out_dir = osp.join(cfg.DATASET_ROOT, "cifar10/test.pt")
 for images, targets in test_loader:
-    out_dir = osp.join(cfg.DATASET_ROOT, "cifar10/test.pt")
     images_test.append(images)
     labels_test.append(targets)
-    test_pt = [torch.cat(images_test).permute(0, 2, 3, 1), torch.cat(labels_test)]
+test_pt = [torch.cat(images_test).permute(0, 2, 3, 1), torch.cat(labels_test)]
 torch.save(test_pt, out_dir)
 print(f"Save {test_pt[0].size(0)} images to {out_dir}")

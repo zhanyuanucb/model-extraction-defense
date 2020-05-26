@@ -22,9 +22,34 @@
 #                                      --log_suffix=max_query \
 #                                      --phi=19 \
 
+#CUDA_VISIBLE_DEVICES=1 python main.py --model_name=wrn28 \
+#                                      --phi=3 \
+#                                      --delta_step=10 \
+#                                      --log_suffix=cifar_delta3 \
+
+#CUDA_VISIBLE_DEVICES=1 python main.py --model_name=wrn28 \
+#                                      --phi=3 \
+#                                      --delta_step=20 \
+#                                      --log_suffix=cifar_delta3 \
 # OOD attack
+#CUDA_VISIBLE_DEVICES=0 python main.py --model_name=wrn28 \
+#                                      --phi=1 \
+#                                      --epochs=50 \
+#                                      --log_suffix=cinic_35000\
+#                                      --random_adv
+
+#CUDA_VISIBLE_DEVICES=0 python main.py --model_name=wrn28 \
+#                                      --log_suffix=cinic_blinder \
+#                                      --blinders_dir=/mydata/model-extraction/model-extraction-defense/attack/adversary/query_blinding/autoencoder_blind/phase2_cinic10_0_
+                                     
 CUDA_VISIBLE_DEVICES=0 python main.py --model_name=wrn28 \
-                                      --phi=1 \
-                                      --epochs=50 \
-                                      --log_suffix=cinic_maxquery\
-                                      --random_adv
+                                      --k=5 \
+                                      --thresh=0.028577305126935244 \
+                                      --log_suffix=conf_wrn28 \
+                                      --return_conf_max
+                                      
+CUDA_VISIBLE_DEVICES=0 python main.py --model_name=wrn40 \
+                                      --k=5 \
+                                      --thresh=0.028577305126935244 \
+                                      --log_suffix=conf_wrn40 \
+                                      --return_conf_max                                   

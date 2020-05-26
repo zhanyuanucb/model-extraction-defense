@@ -29,7 +29,7 @@ from blinders import AutoencoderBlinders
 import transforms as mytransforms
 
 use_cuda = torch.cuda.is_available()
-device = torch.device("cuda:1" if use_cuda else "cpu")
+device = torch.device("cuda:0" if use_cuda else "cpu")
 gpu_count = torch.cuda.device_count()
 
 def main():
@@ -56,7 +56,7 @@ def main():
     MEAN, STD = MEAN.to(device), STD.to(device)
 
     # ---------------- Set up Auto-encoder
-    blinders_fn = mytransforms.get_gaussian_noise(device=device, sigma=0.095)
+    blinders_fn = mytransforms.get_gaussian_noise(device=device, r=0.095)
     auto_encoder = AutoencoderBlinders(blinders_fn)
 
     auto_path = osp.join(auto_path, "checkpoint.blind.pth.tar")
