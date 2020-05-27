@@ -10,7 +10,7 @@ CUDA_VIDIBLE_DEVICES=0 python benign_user.py -l CIFAR10 \
 #                      --return_conf_max                     
 
 #CUDA_VIDIBLE_DEVICES=0 python benign_user.py -l CINIC10 \
-#                      --log_suffix=benign_cinic_conf \
+#                      --log_suffix=benign_cinic_norm_conf \
 #                      --return_conf_max
                       
 #CUDA_VIDIBLE_DEVICES=0 python benign_user.py -l CIFAR10 CINIC10 \

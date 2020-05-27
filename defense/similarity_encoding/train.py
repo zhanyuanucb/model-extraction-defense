@@ -68,14 +68,19 @@ class PositiveNegativeSet(VisionDataset):
 
     def __getitem__(self, index):
         img_pt = self.data[index]
-        img = Image.fromarray(img_pt.numpy(), mode=self.mode)
+        img = self.convert(img_pt)
         ori_img = self.normal_transform(img)
         ran_img = self.random_transform(img)
         other_idx = random.choice(list(range(index)) + list(range(index+1, self.n_samples)))
         img2_pt = self.data[other_idx]
-        img2 = Image.fromarray(img2_pt.numpy(), mode=self.mode)
+        img2 = self.convert(img2_pt)
         other_img = self.normal_transform(img2)
         return ori_img, ran_img, other_img
+
+    def convert(self, image):
+        image *= 255
+        image = Image.fromarray(image.numpy().astype('int8').transpose([1, 2, 0]), mode=self.mode)
+        return image
 
     def __len__(self):
         return self.n_samples
@@ -95,29 +100,11 @@ def get_optimizer(parameters, optimizer_type, lr=0.01, momentum=0.5, **kwargs):
         raise ValueError('Unrecognized optimizer type')
     return optimizer
 
-def get_pathset(src_set):
-    pathset = []
-    assert hasattr(src_set, 'samples'), "oh no, you don't have samples"
-    with tqdm(total=len(src_set)) as pbar:
-        for sample in src_set.samples:
-            img_t = sample[0]  # Image paths
-            pathset.append(img_t)
-            pbar.update(1)
-    return pathset
-
 class IdLayer(nn.Module):
     def __init__(self):
         super(IdLayer, self).__init__()
     def forward(self, x):
         return x
-
-use_cuda = torch.cuda.is_available()
-device = torch.device("cuda:0" if use_cuda else "cpu")
-if use_cuda:
-    print("GPU: {}".format(torch.cuda.get_device_name(0)))
-else:
-    print(device)
-gpu_count = torch.cuda.device_count()
 
 def main():
     parser = argparse.ArgumentParser(description='Train similarity encoder')
@@ -131,6 +118,7 @@ def main():
     parser.add_argument('--batch_size', metavar='TYPE', type=int, help='Batch size of queries', default=1)
     parser.add_argument('--train_epochs', metavar='TYPE', type=int, help='Training epochs', default=100)
     parser.add_argument('--sim_epochs', metavar='TYPE', type=int, help='Training epochs', default=50)
+    parser.add_argument('--sim_norm', action='store_true')
     parser.add_argument('--callback', metavar='TYPE', type=float, help='Stop training once val acc meets requirement', default=None)
     parser.add_argument('--optimizer_name', metavar='TYPE', type=str, help='Optimizer name', default="adam")
     parser.add_argument('--ckpt_suffix', metavar='TYPE', type=str, default="")
@@ -159,9 +147,17 @@ def main():
     if dataset_name not in valid_datasets:
         raise ValueError('Dataset not found. Valid arguments = {}'.format(valid_datasets))
     modelfamily = datasets.dataset_to_modelfamily[dataset_name]
-    train_transform = datasets.modelfamily_to_transforms[modelfamily]['train2']
-    test_transform = datasets.modelfamily_to_transforms[modelfamily]['test2']
-    random_transform = transform_utils.RandomTransforms(modelfamily=modelfamily)
+
+    sim_norm = params["sim_norm"] # whether apply normalization on random_transform.
+                                  # should be consistent to train/test_transform
+    random_transform = transform_utils.RandomTransforms(modelfamily=modelfamily, normal=sim_norm)
+    if sim_norm: # Apply data normalization
+        train_transform = datasets.modelfamily_to_transforms[modelfamily]['train']
+        test_transform = datasets.modelfamily_to_transforms[modelfamily]['test']
+    else:
+        train_transform = datasets.modelfamily_to_transforms[modelfamily]['train2']
+        test_transform = datasets.modelfamily_to_transforms[modelfamily]['test2']
+
     trainset = datasets.__dict__[dataset_name](train=True, transform=train_transform) # Augment data while training
     valset = datasets.__dict__[dataset_name](train=False, transform=test_transform)
 

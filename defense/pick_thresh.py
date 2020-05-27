@@ -164,7 +164,7 @@ def main():
             model = zoo.get_net(model_name, modelfamily, num_classes=num_classes)
             model.last_linear = IdLayer()
             ckp = params['ckp_dir']
-            ckp = osp.join(ckp, encoder_name, f"checkpoint.sim-{margin}.pth.tar")
+            ckp = osp.join(ckp, model_name, encoder_name, f"checkpoint.sim-{margin}.pth.tar")
             if osp.isfile(ckp):
                 print("=> loading checkpoint '{}'".format(ckp))
                 checkpoint = torch.load(ckp)
@@ -181,7 +181,7 @@ def main():
             ks, thresholds = calculate_thresholds(train_data, K=K, encoder=model, up_to_K=up_to_K)
 
             out_dir = params['out_dir']
-            out_dir = osp.join(out_dir, encoder_name)
+            out_dir = osp.join(out_dir, model_name, encoder_name)
 
             plt.plot(ks, thresholds, label=encoder_name)
             plt.xlabel('k (# of nearest neighbors)')

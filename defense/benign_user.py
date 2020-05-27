@@ -37,8 +37,8 @@ def main():
     parser.add_argument("--encoder_ckp", metavar="PATH", type=str,
                         default="/mydata/model-extraction/model-extraction-defense/defense/similarity_encoding/")
     parser.add_argument("--encoder_margin", metavar="TYPE", type=float, default=3.2)
-    parser.add_argument("--k", metavar="TYPE", type=int, default=10)
-    parser.add_argument("--thresh", metavar="TYPE", type=float, help="detector threshold", default=0.0397684188708663)
+    parser.add_argument("--k", metavar="TYPE", type=int, default=5)
+    parser.add_argument("--thresh", metavar="TYPE", type=float, help="detector threshold", default=0.1000156873241067)
     parser.add_argument("--log_suffix", metavar="TYPE", type=str, default="benign")
     parser.add_argument("--log_dir", metavar="PATH", type=str,
                         default="./")
@@ -96,97 +96,97 @@ def main():
     batch_size = params["batch_size"]
     num_workers = 10
 
-    testset_name = "CIFAR10"
-    query_train_dir = cfg.dataset2dir[testset_name]["train"]
-    query_train_images, query_train_labels = torch.load(query_train_dir)
-    query_train_images = query_train_images.permute(0, 3, 1, 2)
-    query_train_samples = (query_train_images, query_train_labels)
-    query_trainset = ImageTensorSet(query_train_samples, transform=test_transform)
-    queryloader_train = DataLoader(query_trainset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
-    print('=> Queryset size (training split) = {}'.format(len(query_trainset)))
-    query_val_dir = cfg.dataset2dir[testset_name]["test"]
-    query_val_images, query_val_labels = torch.load(query_val_dir)
-    query_val_images = query_val_images.permute(0, 3, 1, 2)
-    query_val_samples = (query_val_images, query_val_labels)
-    query_valset = ImageTensorSet(query_val_samples, transform=test_transform)
-    queryloader_val = DataLoader(query_valset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
-    print('=> Queryset size (validation split) = {}'.format(len(query_valset)))
-    if return_conf_max:
-        conf_list = []
-        total_train, correct_train = 0, 0
-        for images, labels in queryloader_train:
-            labels = labels.to(device)
-            is_adv, y, conf_max = blackbox(images)
-            _, predicted = y.max(1)
-            correct_train += predicted.eq(labels).sum().item()
-            total_train += labels.size(0)
-            conf_list.append(conf_max.clone())
-        print("=> Train accuracy: {:.2f}".format(correct_train/total_train))
-        total_val, correct_val = 0, 0
-        for images, labels in queryloader_val:
-            labels = labels.to(device)
-            is_adv, y, conf_max = blackbox(images)
-            _, predicted = y.max(1)
-            correct_val += predicted.eq(labels).sum().item()
-            total_val += labels.size(0)
-            conf_list.append(conf_max.clone())
-        print("=> Validation accuracy: {:.2f}".format(correct_val/total_val))
-    conf_list = torch.cat(conf_list).cpu().numpy()
-    plt.hist(conf_list, bins=50, density=True)
-    plt.title(f"Histogram of blackbox prediction confidence (benign user)")
-    plt.savefig(osp.join(log_dir, 'conf_hist.png'))
-    torch.save(conf_list, osp.join(log_dir, 'conf_list.pkl'))
-
-
-    #--------- Extraction
-#    candidate_sets = params["testset_names"]
-#    conf_list = []
-#    for testset_name in candidate_sets:
-#        valid_datasets = datasets.__dict__.keys()
-#        if testset_name not in valid_datasets:
-#            raise ValueError('Dataset not found. Valid arguments = {}'.format(valid_datasets))
-#        modelfamily = datasets.dataset_to_modelfamily[testset_name]
-#        print(testset_name, modelfamily)
-#        dataset = datasets.__dict__[testset_name]
-#
-#        trainset = dataset(train=True, transform=test_transform)
-#        print('=> Queryset size (training split) = {}'.format(len(trainset)))
-#        testset = dataset(train=False, transform=test_transform)
-#        print('=> Queryset size (test split) = {}'.format(len(testset)))
-#        train_loader = DataLoader(trainset, batch_size=batch_size, shuffle=True)
-#        test_loader = DataLoader(testset, batch_size=batch_size, shuffle=True)
-#
-#        if return_conf_max:
-#            total_train, correct_train = 0, 0
-#            for images, labels in train_loader:
-#                is_adv, y, conf_max = blackbox(images)
-#                labels = labels.to(device)
-#                is_adv, y, conf_max = blackbox(images)
-#                _, predicted = y.max(1)
-#                correct_train += predicted.eq(labels).sum().item()
-#                total_train += labels.size(0)
-#                conf_list.append(conf_max.clone())
-#            print("=> Train accuracy: {:.2f}".format(correct_train/total_train))
-#            total_val, correct_val = 0, 0
-#            for images, labels in test_loader:
-#                is_adv, y, conf_max = blackbox(images)
-#                labels = labels.to(device)
-#                is_adv, y, conf_max = blackbox(images)
-#                _, predicted = y.max(1)
-#                correct_val += predicted.eq(labels).sum().item()
-#                total_val += labels.size(0)
-#                conf_list.append(conf_max.clone())
-#            print("=> Validation accuracy: {:.2f}".format(correct_val/total_val))
-#        else:
-#            for images, labels in train_loader:
-#                is_adv, y = blackbox(images)
-#            for images, labels in test_loader:
-#                is_adv, y = blackbox(images)
+#    testset_name = "CIFAR10"
+#    query_train_dir = cfg.dataset2dir[testset_name]["train"]
+#    query_train_images, query_train_labels = torch.load(query_train_dir)
+#    #query_train_images = query_train_images.permute(0, 3, 1, 2)
+#    query_train_samples = (query_train_images, query_train_labels)
+#    query_trainset = ImageTensorSet(query_train_samples, transform=test_transform)
+#    queryloader_train = DataLoader(query_trainset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
+#    print('=> Queryset size (training split) = {}'.format(len(query_trainset)))
+#    query_val_dir = cfg.dataset2dir[testset_name]["test"]
+#    query_val_images, query_val_labels = torch.load(query_val_dir)
+#    #query_val_images = query_val_images.permute(0, 3, 1, 2)
+#    query_val_samples = (query_val_images, query_val_labels)
+#    query_valset = ImageTensorSet(query_val_samples, transform=test_transform)
+#    queryloader_val = DataLoader(query_valset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
+#    print('=> Queryset size (validation split) = {}'.format(len(query_valset)))
+#    if return_conf_max:
+#        conf_list = []
+#        total_train, correct_train = 0, 0
+#        for images, labels in queryloader_train:
+#            labels = labels.to(device)
+#            is_adv, y, conf_max = blackbox(images)
+#            _, predicted = y.max(1)
+#            correct_train += predicted.eq(labels).sum().item()
+#            total_train += labels.size(0)
+#            conf_list.append(conf_max.clone())
+#        print("=> Train accuracy: {:.2f}".format(correct_train/total_train))
+#        total_val, correct_val = 0, 0
+#        for images, labels in queryloader_val:
+#            labels = labels.to(device)
+#            is_adv, y, conf_max = blackbox(images)
+#            _, predicted = y.max(1)
+#            correct_val += predicted.eq(labels).sum().item()
+#            total_val += labels.size(0)
+#            conf_list.append(conf_max.clone())
+#        print("=> Validation accuracy: {:.2f}".format(correct_val/total_val))
 #    conf_list = torch.cat(conf_list).cpu().numpy()
 #    plt.hist(conf_list, bins=50, density=True)
 #    plt.title(f"Histogram of blackbox prediction confidence (benign user)")
 #    plt.savefig(osp.join(log_dir, 'conf_hist.png'))
 #    torch.save(conf_list, osp.join(log_dir, 'conf_list.pkl'))
+
+
+    #--------- Extraction
+    candidate_sets = params["testset_names"]
+    conf_list = []
+    for testset_name in candidate_sets:
+        valid_datasets = datasets.__dict__.keys()
+        if testset_name not in valid_datasets:
+            raise ValueError('Dataset not found. Valid arguments = {}'.format(valid_datasets))
+        modelfamily = datasets.dataset_to_modelfamily[testset_name]
+        dataset = datasets.__dict__[testset_name]
+
+        #test_transform = datasets.modelfamily_to_transforms[modelfamily]['test']
+        trainset = dataset(train=True, transform=test_transform)
+        print('=> Queryset size (training split) = {}'.format(len(trainset)))
+        testset = dataset(train=False, transform=test_transform)
+        print('=> Queryset size (test split) = {}'.format(len(testset)))
+        train_loader = DataLoader(trainset, batch_size=batch_size, shuffle=True)
+        test_loader = DataLoader(testset, batch_size=batch_size, shuffle=True)
+
+        if return_conf_max:
+            total_train, correct_train = 0, 0
+            for images, labels in train_loader:
+                is_adv, y, conf_max = blackbox(images)
+                labels = labels.to(device)
+                is_adv, y, conf_max = blackbox(images)
+                _, predicted = y.max(1)
+                correct_train += predicted.eq(labels).sum().item()
+                total_train += labels.size(0)
+                conf_list.append(conf_max.clone())
+            print("=> Train accuracy: {:.2f}".format(correct_train/total_train))
+            total_val, correct_val = 0, 0
+            for images, labels in test_loader:
+                is_adv, y, conf_max = blackbox(images)
+                labels = labels.to(device)
+                is_adv, y, conf_max = blackbox(images)
+                _, predicted = y.max(1)
+                correct_val += predicted.eq(labels).sum().item()
+                total_val += labels.size(0)
+                conf_list.append(conf_max.clone())
+            print("=> Validation accuracy: {:.2f}".format(correct_val/total_val))
+        else:
+            for images, labels in train_loader:
+                is_adv, y = blackbox(images)
+            for images, labels in test_loader:
+                is_adv, y = blackbox(images)
+    conf_list = torch.cat(conf_list).cpu().numpy()
+    plt.hist(conf_list, bins=50, density=True)
+    plt.title(f"Histogram of blackbox prediction confidence (benign user)")
+    plt.savefig(osp.join(log_dir, 'conf_hist.png'))
+    torch.save(conf_list, osp.join(log_dir, 'conf_list.pkl'))
 
     # Store arguments
     params_out_path = osp.join(log_dir, 'params_train.json')

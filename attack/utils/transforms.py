@@ -38,7 +38,7 @@ class DefaultTransforms:
 class RandomTransforms:
 
     def __init__(self, modelfamily="cifar", normal=False,
-                 rotate_r=0.018, translate_r=0.45, scale_r=0.17, crop_r=0.04,
+                 rotate_r=0.018, translate_r=0.05, scale_r=0.17, crop_r=0.04,
                  bright_r=0.09, contrast_r=0.55, unif_r=0.064, norm_std=0.095):
         self.normal = normal
         if modelfamily == "cifar":
@@ -83,7 +83,13 @@ class RandomTransforms:
                            transforms.ColorJitter(contrast=self.contrast_r) # Contrast, r=0.55
                            ]
 
-        self.noise_weight = 0.25 
+        self.noise_candidates = [transforms.Lambda(lambda x: x + torch.randn_like(x).to(x.device) * self.norm_std),
+                                              transforms.Lambda(lambda x: x + 2*self.unif_r*torch.rand_like(x).to(x.device) - self.unif_r)]
+                                            
+        self.noise = transforms.RandomChoice(self.noise_candidates)
+        num_affine = len(self.candidates)
+        num_noise = len(self.noise_candidates)
+        self.noise_weight = num_affine/(num_noise + num_affine) 
         self.affine_weight = 1 - self.noise_weight
                 
         self.noise = transforms.RandomChoice([transforms.Lambda(lambda x: x + torch.randn_like(x).to(x.device) * self.norm_std),

@@ -1,3 +1,4 @@
+import torch
 from torch.utils.data import Dataset
 from torchvision.datasets.folder import ImageFolder, IMG_EXTENSIONS, default_loader
 from PIL import Image
@@ -15,7 +16,8 @@ class ImageTensorSet(Dataset):
     def __getitem__(self, index):
         img, target = self.data[index], self.targets[index]
         if self.transform is not None:
-            img = Image.fromarray(img.numpy().transpose([1, 2, 0]), mode=self.mode)
+            img *= 255
+            img = Image.fromarray(img.numpy().astype('int8').transpose([1, 2, 0]), mode=self.mode)
             img = self.transform(img)
 
         return img, target

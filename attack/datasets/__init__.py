@@ -57,8 +57,13 @@ modelfamily_to_transforms = {
 
     'cifar': {
         'train': transforms.Compose([
-            transforms.RandomCrop(32, padding=4),
-            transforms.RandomHorizontalFlip(),
+            transforms.RandomChoice([transforms.RandomHorizontalFlip(),
+                                     transforms.RandomResizedCrop(32),
+                                     transforms.RandomRotation(45),
+                                     transforms.RandomAffine(0, translate=(0.45, 0.45)),
+                                     transforms.ColorJitter(brightness=0.5),
+                                     transforms.ColorJitter(contrast=0.55)
+                                     ]),
             transforms.ToTensor(),
             transforms.Normalize(mean=(0.4914, 0.4822, 0.4465),
                                  std=(0.2023, 0.1994, 0.2010)),
@@ -69,8 +74,13 @@ modelfamily_to_transforms = {
                                  std=(0.2023, 0.1994, 0.2010)),
         ]),
         'train2': transforms.Compose([
-            transforms.RandomCrop(32, padding=4),
-            transforms.RandomHorizontalFlip(),
+            transforms.RandomChoice([transforms.RandomHorizontalFlip(),
+                                     transforms.RandomResizedCrop(32),
+                                     transforms.RandomRotation(45),
+                                     transforms.RandomAffine(0, translate=(0.45, 0.45)),
+                                     transforms.ColorJitter(brightness=0.5),
+                                     transforms.ColorJitter(contrast=0.55)
+                                     ]),
             transforms.ToTensor()
         ]),
         'test2': transforms.ToTensor()
