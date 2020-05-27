@@ -55,8 +55,8 @@ def main():
     parser.add_argument("--encoder_ckp", metavar="PATH", type=str,
                         default="/mydata/model-extraction/model-extraction-defense/defense/similarity_encoding/")
     parser.add_argument("--encoder_margin", metavar="TYPE", type=float, default=3.2)
-    parser.add_argument("--k", metavar="TYPE", type=int, default=10)
-    parser.add_argument("--thresh", metavar="TYPE", type=float, help="detector threshold", default=0.0397684188708663)
+    parser.add_argument("--k", metavar="TYPE", type=int, default=5)
+    parser.add_argument("--thresh", metavar="TYPE", type=float, help="detector threshold", default=0.049665371380746365)
     parser.add_argument("--log_suffix", metavar="TYPE", type=str, default="testing")
     parser.add_argument("--params_search", action="store_true")
     parser.add_argument("--random_adv", action="store_true")

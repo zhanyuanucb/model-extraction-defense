@@ -12,13 +12,19 @@
 #CUDA_VISIBLE_DEVICES=1 python train.py --load_pretrained --ckp_dir=/mydata/model-extraction/model-extraction-defense/attack/victim/models/cifar10/wrn28/ --model_name=wrn28 --sim_epochs=10 --margin=100
 #CUDA_VISIBLE_DEVICES=1 python train.py --load_pretrained --ckp_dir=/mydata/model-extraction/model-extraction-defense/attack/victim/models/cifar10/wrn28/ --model_name=wrn28 --sim_epochs=10 --margin=1000
 
-python train.py --load_pretrained --ckp_dir=/mydata/model-extraction/model-extraction-defense/attack/victim/models/cifar10/wrn28/ \
-                --model_name=wrn28 \
-                --sim_norm \
+#python train.py --load_pretrained --ckp_dir=/mydata/model-extraction/model-extraction-defense/attack/victim/models/cifar10/wrn28/ \
+#                --model_name=wrn28 \
+#                --sim_norm \
+#                --sim_epochs=30 \
+#                --margin=10 \
+#                -d 0
+
+CUDA_VISIBLE_DEVICES=1 python train.py --model_name=wrn28 \
+                --ckpt_suffix=.feat_wrn28_xnorm \
                 --sim_epochs=30 \
                 --margin=10 \
-                -d 0
-
+                -d 1
+                
 #python train.py --sim_epochs=30 \
 #                --sim_norm \
 #                --margin=10 \

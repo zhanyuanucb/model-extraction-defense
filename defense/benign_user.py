@@ -38,7 +38,7 @@ def main():
                         default="/mydata/model-extraction/model-extraction-defense/defense/similarity_encoding/")
     parser.add_argument("--encoder_margin", metavar="TYPE", type=float, default=3.2)
     parser.add_argument("--k", metavar="TYPE", type=int, default=5)
-    parser.add_argument("--thresh", metavar="TYPE", type=float, help="detector threshold", default=0.1000156873241067)
+    parser.add_argument("--thresh", metavar="TYPE", type=float, help="detector threshold", default=0.049665371380746365)
     parser.add_argument("--log_suffix", metavar="TYPE", type=str, default="benign")
     parser.add_argument("--log_dir", metavar="PATH", type=str,
                         default="./")

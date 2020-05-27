@@ -122,6 +122,7 @@ def main():
     parser.add_argument('--out_dir', metavar='TYPE', type=str, help='Save output to where', default="/mydata/model-extraction/model-extraction-defense/defense/similarity_encoding")
     parser.add_argument('--K', metavar='TYPE', type=int, help="K nearest neighbors", default=1000)
     parser.add_argument('--up_to_K', action="store_true")
+    parser.add_argument('--norm', action="store_true")
 
     # ----------- Other params
     parser.add_argument('-d', '--device_id', metavar='D', type=int, help='Device id', default=0)
@@ -138,12 +139,16 @@ def main():
 
     # ----------- Set up dataset
     dataset_name = params['dataset_name']
+    norm = params["norm"]
     dataset = datasets.__dict__[dataset_name]
     valid_datasets = datasets.__dict__.keys()
     if dataset_name not in valid_datasets:
         raise ValueError('Dataset not found. Valid arguments = {}'.format(valid_datasets))
     modelfamily = datasets.dataset_to_modelfamily[dataset_name]
-    transform = datasets.modelfamily_to_transforms[modelfamily]['test']
+    if norm:
+        transform = datasets.modelfamily_to_transforms[modelfamily]['test']
+    else:
+        transform = datasets.modelfamily_to_transforms[modelfamily]['test2']
 
     # ---------------- Load dataset
     num_workers = params['nworkers']

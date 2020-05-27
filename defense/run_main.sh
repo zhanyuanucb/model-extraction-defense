@@ -42,14 +42,20 @@
 #                                      --log_suffix=cinic_blinder \
 #                                      --blinders_dir=/mydata/model-extraction/model-extraction-defense/attack/adversary/query_blinding/autoencoder_blind/phase2_cinic10_0_
                                      
+#CUDA_VISIBLE_DEVICES=0 python main.py --model_name=wrn28 \
+#                                      --log_suffix=conf_wrn28_k5 \
+#                                      --return_conf_max \
+#                                      --device_id=1
+
 CUDA_VISIBLE_DEVICES=0 python main.py --model_name=wrn28 \
-                                      --k=5 \
-                                      --thresh=0.028577305126935244 \
-                                      --log_suffix=conf_wrn28 \
-                                      --return_conf_max
-                                      
-CUDA_VISIBLE_DEVICES=0 python main.py --model_name=wrn40 \
-                                      --k=5 \
-                                      --thresh=0.028577305126935244 \
-                                      --log_suffix=conf_wrn40 \
-                                      --return_conf_max                                   
+                                      --k=10 \
+                                      --thresh=0.06685449682176113 \
+                                      --log_suffix=conf_wrn28_k10 \
+                                      --return_conf_max \
+                                      --device_id=0
+
+#CUDA_VISIBLE_DEVICES=0 python main.py --model_name=wrn40 \
+#                                      --k=5 \
+#                                      --thresh=0.028577305126935244 \
+#                                      --log_suffix=conf_wrn40 \
+#                                      --return_conf_max                                   
