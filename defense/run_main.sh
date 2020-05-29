@@ -47,12 +47,21 @@
 #                                      --return_conf_max \
 #                                      --device_id=1
 
-CUDA_VISIBLE_DEVICES=0 python main.py --model_name=wrn28 \
-                                      --k=10 \
-                                      --thresh=0.06685449682176113 \
-                                      --log_suffix=conf_wrn28_k10 \
+#CUDA_VISIBLE_DEVICES=0 python main.py --model_name=wrn28 \
+#                                      --k=10 \
+#                                      --thresh=0.06685449682176113 \
+#                                      --log_suffix=conf_wrn28_k10 \
+#                                      --return_conf_max \
+#                                      --device_id=0
+
+CUDA_VISIBLE_DEVICES=1 python main.py --model_name=wrn28 \
+                                      --encoder_arch_name=wrn28 \
+                                      --k=5 \
+                                      --thresh=0.7609165414571762 \
+                                      --eps=0.05 \
+                                      --log_suffix=xnorm_wrn28_k5 \
                                       --return_conf_max \
-                                      --device_id=0
+                                      --device_id=1
 
 #CUDA_VISIBLE_DEVICES=0 python main.py --model_name=wrn40 \
 #                                      --k=5 \

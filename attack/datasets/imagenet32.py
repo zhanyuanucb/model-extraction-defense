@@ -37,14 +37,15 @@ class ImageNet32(Dataset):
                 self.targets.extend(entry['labels'])
 
         self.data = np.vstack(self.data).reshape(-1, 3, 32, 32)
-        self.data = self.data.transpose((0, 2, 3, 1))
+        #self.data = self.data.transpose((0, 2, 3, 1))
     
     def __getitem__(self, index):
+        # TODO: fix ImageNet32 loader
+        raise ValueError
         img, target = self.data[index], self.targets[index]
 
-        img = Image.fromarray(img)
-
         if self.transform is not None:
+            img = self.convert(img)
             img = self.transform(img)
         
         if self.target_transform is not None:
@@ -54,3 +55,9 @@ class ImageNet32(Dataset):
 
     def __len__(self):
         return len(self.data)
+
+    def convert(self, image):
+        print(image.min(), image.max())
+        #image *= 255
+        image = Image.fromarray(image.astype('int8').transpose([1, 2, 0]), mode="RGB")
+        return image

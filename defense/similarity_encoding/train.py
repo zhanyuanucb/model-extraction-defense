@@ -60,14 +60,14 @@ class PositiveNegativeSet(VisionDataset):
     For data in form of serialized tensor
     """
     def __init__(self, load_path, normal_transform=None, random_transform=None, dataset="MNIST"):
-        self.data, _ = torch.load(load_path)
+        self.data, self.targets = torch.load(load_path)
         self.n_samples = self.data.size(0)
         self.normal_transform = normal_transform
         self.random_transform = random_transform
         self.mode = "L" if dataset == "MNIST" else "RGB"
 
     def __getitem__(self, index):
-        img_pt = self.data[index]
+        img_pt, y = self.data[index], self.targets[index]
         img = self.convert(img_pt)
         ori_img = self.normal_transform(img)
         ran_img = self.random_transform(img)
@@ -75,7 +75,7 @@ class PositiveNegativeSet(VisionDataset):
         img2_pt = self.data[other_idx]
         img2 = self.convert(img2_pt)
         other_img = self.normal_transform(img2)
-        return ori_img, ran_img, other_img
+        return ori_img, ran_img, other_img, y
 
     def convert(self, image):
         image *= 255
@@ -119,6 +119,7 @@ def main():
     parser.add_argument('--train_epochs', metavar='TYPE', type=int, help='Training epochs', default=100)
     parser.add_argument('--sim_epochs', metavar='TYPE', type=int, help='Training epochs', default=50)
     parser.add_argument('--sim_norm', action='store_true')
+    parser.add_argument('--adv_train', action='store_true')
     parser.add_argument('--callback', metavar='TYPE', type=float, help='Stop training once val acc meets requirement', default=None)
     parser.add_argument('--optimizer_name', metavar='TYPE', type=str, help='Optimizer name', default="adam")
     parser.add_argument('--ckpt_suffix', metavar='TYPE', type=str, default="")
@@ -214,13 +215,14 @@ def main():
     margin_train = params['margin']
     margin_test = margin_train
     sim_epochs = params['sim_epochs']
+    adv_train = params['adv_train']
     checkpoint_suffix = ".sim-{:.1f}".format(margin_test)
     out_path = osp.join(out_path, model_name, "{}-margin-{:.1f}".format(dataset_name, margin_test))
     if not osp.exists(out_path):
         os.mkdir(out_path)
     encoder_utils.train_model(model, sim_trainset, out_path, epochs=sim_epochs, testset=sim_valset,
                             criterion_train=margin_train, criterion_test=margin_test,
-                            checkpoint_suffix=checkpoint_suffix, device=device, optimizer=optimizer)
+                            checkpoint_suffix=checkpoint_suffix, device=device, optimizer=optimizer, adv_train=adv_train)
 
     params['created_on'] = str(datetime.now())
     params_out_path = osp.join(out_path, f'params_train{checkpoint_suffix}.json')

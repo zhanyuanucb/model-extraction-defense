@@ -51,7 +51,7 @@ class Detector:
     def _process(self, images):
         is_adv = [0 for _ in range(images.size(0))]
         with torch.no_grad():
-            images = images * self.STD + self.MEAN
+            #images = images * self.STD + self.MEAN
             queries = self.encoder(images).cpu().numpy()
         for i, query in enumerate(queries):
             is_attack = self._process_query(query)

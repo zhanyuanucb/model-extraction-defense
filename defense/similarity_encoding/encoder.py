@@ -31,33 +31,20 @@ __maintainer__ = "Zhanyuan Zhang"
 __email__ = "zhang_zhanyuan@berkeley.edu"
 __status__ = "Development"
 
-def get_net(model_name, n_output_classes=1000, **kwargs):
-    print('=> loading model {} with arguments: {}'.format(model_name, kwargs))
-    valid_models = [x for x in torch_models.__dict__.keys() if not x.startswith('__')]
-    if model_name not in valid_models:
-        raise ValueError('Model not found. Valid arguments = {}...'.format(valid_models))
-    model = torch_models.__dict__[model_name](**kwargs)
-    # Edit last FC layer to include n_output_classes
-    if n_output_classes != 1000:
-        if 'squeeze' in model_name:
-            model.num_classes = n_output_classes
-            model.classifier[1] = nn.Conv2d(512, n_output_classes, kernel_size=(1, 1))
-        elif 'alexnet' in model_name:
-            model.num_classes = n_output_classes
-            num_ftrs = model.classifier[6].in_features
-            model.classifier[6] = nn.Linear(num_ftrs, n_output_classes)
-        elif 'vgg' in model_name:
-            model.num_classes = n_output_classes
-            num_ftrs = model.classifier[6].in_features
-            model.classifier[6] = nn.Linear(num_ftrs, n_output_classes)
-        elif 'dense' in model_name:
-            model.num_classes = n_output_classes
-            num_ftrs = model.classifier.in_features
-            model.classifier = nn.Linear(num_ftrs, n_output_classes)
-        else:
-            num_ftrs = model.fc.in_features
-            model.fc = nn.Linear(num_ftrs, n_output_classes)
-    return model
+def pgd_linf(model, x, y, eps=0.1, alpha=0.01, num_iter=20, criterion=nn.CrossEntropyLoss(), rand_init=False):
+    # Reference: https://adversarial-ml-tutorial.org/adversarial_training/
+    if rand_init:
+        delta = torch.rand_like(x, requires_grad=True)
+        delta.data = delta.data*2*eps - eps
+    else:
+        delta = torch.zeros_like(x, requires_grad=True)
+
+    for t in range(num_iter):
+        loss = criterion(model(x+delta), y)
+        loss.backward()
+        delta.data = (delta + alpha*delta.grad.detach().sign()).clamp(-eps, eps)
+        delta.grad.zero_()
+    return delta.detach()
 
 
 def soft_cross_entropy(pred, soft_targets, weights=None):
@@ -66,7 +53,7 @@ def soft_cross_entropy(pred, soft_targets, weights=None):
     else:
         return torch.mean(torch.sum(- soft_targets * F.log_softmax(pred, dim=1), 1))
 
-def train_step(model, train_loader, margin, optimizer, epoch, device, scheduler, log_interval=10):
+def train_step(model, train_loader, margin, optimizer, epoch, device, scheduler, log_interval=10, adv_train=False):
     model.train()
     train_loss = 0.
     p_correct = 0
@@ -77,34 +64,8 @@ def train_step(model, train_loader, margin, optimizer, epoch, device, scheduler,
 
     t_start = time.time()
 
-    for batch_idx, (o, t, d) in enumerate(train_loader):
-        """
-        # ------------------- Start debugging session
-        print(o.shape, t.shape, d.shape)
-        mean = torch.tensor(cfg.CIFAR_MEAN).reshape((3, 1, 1))
-        std = torch.tensor(cfg.CIFAR_STD).reshape((3, 1, 1))
-        import matplotlib.pyplot as plt
-        debug_root = osp.join('/mydata/model-extraction/model-extraction-defense/defense/similarity_encoding', 'debug')
-        if not osp.exists(debug_root):
-            os.mkdir(debug_root)
-        for i in range(20):
-            save_path = osp.join(debug_root, str(i))
-            if not osp.exists(save_path):
-                os.mkdir(save_path)
-            o_i, t_i, d_i = o[i], t[i], d[i]
-            o_i = np.clip((o_i).numpy().transpose([1, 2, 0]), 0., 1.)
-            t_i = np.clip((t_i).numpy().transpose([1, 2, 0]), 0., 1.)
-            d_i = np.clip((d_i).numpy().transpose([1, 2, 0]), 0., 1.)
-            ot_i = np.clip(np.abs(o_i - t_i), 0., 1.)
-            plt.imsave(osp.join(save_path, 'o.png'), o_i)
-            plt.imsave(osp.join(save_path, 't.png'), t_i)
-            plt.imsave(osp.join(save_path, 'd.png'), d_i)
-            plt.imsave(osp.join(save_path, 'ot.png'), ot_i)
-
-        exit(1)
-        # ------------------ End debugging session
-        """
-        o, t, d = o.to(device), t.to(device), d.to(device)
+    for batch_idx, (o, t, d, labels) in enumerate(train_loader):
+        o, t, d, labels = o.to(device), t.to(device), d.to(device), labels.to(device)
         optimizer.zero_grad()
         o_feat = model(o)
         t_feat = model(t)
@@ -112,6 +73,14 @@ def train_step(model, train_loader, margin, optimizer, epoch, device, scheduler,
         p_dist = torch.norm(o_feat - t_feat, p=2, dim=1)
         n_dist = torch.norm(o_feat - d_feat, p=2, dim=1)
         loss = torch.mean(p_dist**2 + F.relu(margin**2 - n_dist**2))
+        if adv_train:
+            o_delta = pgd_linf(model, o, labels)
+            o_adv = o + o_delta
+            adv_feat = model(o_adv)
+            adv_dist = torch.norm(o_feat - adv_feat, p=2, dim=1)
+            loss = torch.mean(p_dist**2 + adv_dist**2 + F.relu(margin**2 - n_dist**2))
+        else:
+            loss = torch.mean(p_dist**2 + F.relu(margin**2 - n_dist**2))
         loss.backward()
         optimizer.step()
         scheduler.step(epoch)
@@ -148,7 +117,7 @@ def test_step(model, test_loader, margin, device, epoch=0., silent=False):
     t_start = time.time()
 
     with torch.no_grad():
-        for batch_idx, (o, t, d) in enumerate(test_loader):
+        for batch_idx, (o, t, d, y) in enumerate(test_loader):
             o, t, d = o.to(device), t.to(device), d.to(device)
             o_feat = model(o)
             t_feat = model(t)
@@ -175,7 +144,7 @@ def test_step(model, test_loader, margin, device, epoch=0., silent=False):
 
 def train_model(model, trainset, out_path, batch_size=64, margin_train=np.sqrt(10), margin_test=np.sqrt(10), testset=None,
                 device=None, num_workers=10, lr=0.1, momentum=0.5, lr_step=30, lr_gamma=0.1, resume=None,
-                epochs=100, log_interval=100, checkpoint_suffix='', optimizer=None, scheduler=None,
+                epochs=100, log_interval=100, checkpoint_suffix='', optimizer=None, scheduler=None, adv_train=False,
                 **kwargs):
     if device is None:
         device = torch.device('cuda')
@@ -225,7 +194,7 @@ def train_model(model, trainset, out_path, batch_size=64, margin_train=np.sqrt(1
     for epoch in range(start_epoch, epochs + 1):
         #scheduler.step(epoch) # should call optimizer.step() before scheduler.stop(epoch)
         train_loss, train_pacc, train_nacc = train_step(model, train_loader, margin_train, optimizer, epoch, device,
-                                           scheduler, log_interval=log_interval)
+                                           scheduler, log_interval=log_interval, adv_train=adv_train)
         best_train_pacc = max(best_train_pacc, train_pacc)
         best_train_nacc = max(best_train_nacc, train_nacc)
 

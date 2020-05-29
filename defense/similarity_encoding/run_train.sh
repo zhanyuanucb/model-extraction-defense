@@ -19,13 +19,17 @@
 #                --margin=10 \
 #                -d 0
 
-CUDA_VISIBLE_DEVICES=1 python train.py --model_name=wrn28 \
-                --ckpt_suffix=.feat_wrn28_xnorm \
-                --sim_epochs=30 \
-                --margin=10 \
-                -d 1
-                
-#python train.py --sim_epochs=30 \
-#                --sim_norm \
+
+#CUDA_VISIBLE_DEVICES=1 python train.py --model_name=wrn28 \
+#                --ckpt_suffix=.feat_wrn28_xnorm \
+#                --sim_epochs=30 \
 #                --margin=10 \
-#                -d 0
+#                -d 1
+                
+python train.py --load_pretrained --ckp_dir=/mydata/model-extraction/model-extraction-defense/defense/similarity_encoding/ \
+                --sim_epochs=30 \
+                --ckpt_suffix=.feat_simnet_norm \
+                --sim_norm \
+                --adv_train \
+                --margin=10 \
+                -d 0
