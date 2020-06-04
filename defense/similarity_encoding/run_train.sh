@@ -26,10 +26,34 @@
 #                --margin=10 \
 #                -d 1
                 
-python train.py --load_pretrained --ckp_dir=/mydata/model-extraction/model-extraction-defense/defense/similarity_encoding/ \
+#CUDA_VISIBLE_DEVICES=0 python train.py --load_pretrained \
+#                --ckp_dir=/mydata/model-extraction/model-extraction-defense/defense/similarity_encoding/ \
+#                --sim_epochs=30 \
+#                --ckpt_suffix=.feat_simnet_xnorm \
+#                --adv_train \
+#                --margin=10 \
+#                -d 0
+#                
+#CUDA_VISIBLE_DEVICES=0 python ../pick_thresh.py --dataset_name=CIFAR10 --model_name=simnet --up_to_K
+#
+#for k in 1 2 3 4 5 6 7 8 9 10 20 30 40 50 100 150 200
+#do
+#   python ../lookup_threshold.py --K=$k --margin=3.2 --dataset=CIFAR10 --encoder_arch=simnet
+#done               
+
+# VGG
+model_name="vgg16"
+CUDA_VISIBLE_DEVICES=0 python train.py \
                 --sim_epochs=30 \
-                --ckpt_suffix=.feat_simnet_norm \
                 --sim_norm \
-                --adv_train \
+                --model_name=$model_name \
+                --ckpt_suffix=.feat_$model_name \
                 --margin=10 \
                 -d 0
+                
+CUDA_VISIBLE_DEVICES=0 python pick_thresh.py --dataset_name=CIFAR10 --model_name=$model_name --up_to_K
+
+for k in 1 2 3 4 5 6 7 8 9 10 20 30 40 50 100 150 200
+do
+   python lookup_threshold.py --K=$k --margin=3.2 --dataset=CIFAR10 --encoder_arch=$model_name
+done               

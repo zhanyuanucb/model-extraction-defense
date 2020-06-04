@@ -54,14 +54,12 @@
 #                                      --return_conf_max \
 #                                      --device_id=0
 
-CUDA_VISIBLE_DEVICES=1 python main.py --model_name=wrn28 \
-                                      --encoder_arch_name=wrn28 \
+CUDA_VISIBLE_DEVICES=0 python main.py --model_name=wrn28 \
+                                      --encoder_arch_name=simnet \
                                       --k=5 \
-                                      --thresh=0.7609165414571762 \
-                                      --eps=0.05 \
-                                      --log_suffix=xnorm_wrn28_k5 \
-                                      --return_conf_max \
-                                      --device_id=1
+                                      --thresh=0.007808731311466545 \
+                                      --log_suffix=simnet \
+                                      --device_id=0
 
 #CUDA_VISIBLE_DEVICES=0 python main.py --model_name=wrn40 \
 #                                      --k=5 \

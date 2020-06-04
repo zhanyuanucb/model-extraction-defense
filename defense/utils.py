@@ -1,4 +1,5 @@
 import torch
+import torch.nn as nn
 from torch.utils.data import Dataset
 from torchvision.datasets.folder import ImageFolder, IMG_EXTENSIONS, default_loader
 from PIL import Image
@@ -81,3 +82,9 @@ class TransferSetImages(Dataset):
 
 def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
+
+class IdLayer(nn.Module):
+    def __init__(self):
+        super(IdLayer, self).__init__()
+    def forward(self, x):
+        return x

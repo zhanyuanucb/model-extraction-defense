@@ -18,7 +18,7 @@ def main():
     dataset_name = params["dataset"]
     encoder_arch = params["encoder_arch"]
     K = params["K"]
-    with open(osp.join(f"similarity_encoding/{encoder_arch}/{dataset_name}-margin-{margin}", "k_n_thresh.pkl"), 'rb') as file:
+    with open(osp.join(f"{encoder_arch}/{dataset_name}-margin-{margin}", "k_n_thresh.pkl"), 'rb') as file:
         ks, thresholds = pickle.load(file)
     assert len(thresholds) > K, f"K({K}) should < len(thresholds){len(thresholds)}"
 
@@ -29,6 +29,10 @@ def main():
         with open(out_dir, 'w') as record:
             title = ["Margin", "K", "Threshold"]
             record.write('\t'.join(title) + '\n')
+
+    with open(out_dir, 'a') as record:
+        record.write(f"{encoder_arch} " + '\n')
+
     with open(out_dir, 'a') as record:
         record.write('\t'.join(msg) + '\n')
 

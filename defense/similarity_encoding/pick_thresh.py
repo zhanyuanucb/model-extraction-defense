@@ -167,7 +167,7 @@ def main():
             model_name = params['model_name']
             num_classes = params['num_classes']
             model = zoo.get_net(model_name, modelfamily, num_classes=num_classes)
-            model.last_linear = IdLayer()
+            model.fc = IdLayer()
             ckp = params['ckp_dir']
             ckp = osp.join(ckp, model_name, encoder_name, f"checkpoint.sim-{margin}.pth.tar")
             if osp.isfile(ckp):
@@ -176,6 +176,7 @@ def main():
                 best_pacc = checkpoint['best_pacc']
                 best_nacc = checkpoint['best_nacc']
                 model.load_state_dict(checkpoint['state_dict'])
+                model.eval()
                 print("=> loaded checkpoint:\n best_pacc: {} \n best_nacc: {}".format(best_pacc, best_nacc))
             else:
                 print("=> no checkpoint found at '{}'".format(ckp))

@@ -40,7 +40,7 @@ def pgd_linf(model, x, y, eps=0.1, alpha=0.01, num_iter=20, criterion=nn.CrossEn
         delta = torch.zeros_like(x, requires_grad=True)
 
     for t in range(num_iter):
-        loss = criterion(model(x+delta), y)
+        loss = criterion(model(x+delta), y) #TODO
         loss.backward()
         delta.data = (delta + alpha*delta.grad.detach().sign()).clamp(-eps, eps)
         delta.grad.zero_()

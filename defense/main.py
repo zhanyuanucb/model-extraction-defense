@@ -18,7 +18,7 @@ from detector import *
 from attack.adversary.jda import MultiStepJDA
 from attack.adversary.query_blinding.blinders import AutoencoderBlinders
 import attack.adversary.query_blinding.transforms as blinders_transforms
-from utils import ImageTensorSet
+from utils import ImageTensorSet, IdLayer
 
 __author = "Zhanyuan Zhang"
 __author_email__ = "zhang_zhanyuan@berkeley.edu"
@@ -50,13 +50,14 @@ def main():
     parser.add_argument("--seedset_dir", metavar="PATH", type=str,
                         default="/mydata/model-extraction/model-extraction-defense/attack/adversary/models/cifar10")
     parser.add_argument("--testset_name", metavar="TYPE", type=str, default="CIFAR10")
+    
     parser.add_argument("--optimizer_name", metavar="TYPE", type=str, default="adam")
     parser.add_argument("--encoder_arch_name", metavar="TYPE", type=str, default="simnet")
     parser.add_argument("--encoder_ckp", metavar="PATH", type=str,
                         default="/mydata/model-extraction/model-extraction-defense/defense/similarity_encoding/")
     parser.add_argument("--encoder_margin", metavar="TYPE", type=float, default=3.2)
     parser.add_argument("--k", metavar="TYPE", type=int, default=5)
-    parser.add_argument("--thresh", metavar="TYPE", type=float, help="detector threshold", default=0.049665371380746365)
+    parser.add_argument("--thresh", metavar="TYPE", type=float, help="detector threshold", default=0.16197727304697038)
     parser.add_argument("--log_suffix", metavar="TYPE", type=str, default="testing")
     parser.add_argument("--params_search", action="store_true")
     parser.add_argument("--random_adv", action="store_true")
@@ -89,6 +90,7 @@ def main():
     modelfamily = datasets.dataset_to_modelfamily[testset_name]
     num_classes = 10
     encoder = zoo.get_net(encoder_arch_name, modelfamily, num_classes=num_classes)
+    encoder.fc = IdLayer().to(device)
     MEAN, STD = cfg.NORMAL_PARAMS[modelfamily]
 
     # setup similarity encoder
@@ -106,6 +108,7 @@ def main():
         print("===> loaded checkpoint (epoch {})".format(checkpoint['epoch']))
 
         encoder = encoder.to(device)
+        encoder.eval()
 
         blackbox = Detector(k, thresh, encoder, MEAN, STD, log_suffix=log_suffix, log_dir=log_dir, return_max_conf=return_conf_max)
         blackbox.init(blackbox_dir, device, time=created_on)
@@ -243,11 +246,12 @@ def main():
         with open(search_log_path, 'a') as log:
             log.write('\t'.join([created_on, str(best_test_acc)]) + '\n')
 
-    conf_list = torch.cat(conf_list).numpy()
-    plt.hist(conf_list, bins=50, density=True)
-    plt.title(f"Histogram of blackbox prediction confidence ({model_name})")
-    plt.savefig(osp.join(ckp_out_root, 'conf_hist.png'))
-    torch.save(conf_list, osp.join(ckp_out_root, 'conf_list.pkl'))
+    if return_conf_max:
+        conf_list = torch.cat(conf_list).numpy()
+        plt.hist(conf_list, bins=50, density=True)
+        plt.title(f"Histogram of blackbox prediction confidence ({model_name})")
+        plt.savefig(osp.join(ckp_out_root, 'conf_hist.png'))
+        torch.save(conf_list, osp.join(ckp_out_root, 'conf_list.pkl'))
 
 if __name__ == '__main__':
     main()

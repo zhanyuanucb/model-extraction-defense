@@ -201,14 +201,14 @@ def main():
     # Build dataset for Positive/Negative samples
     train_dir = cfg.dataset2dir[dataset_name]["train"]
     test_dir = cfg.dataset2dir[dataset_name]["test"]
+    #train_dir = "/mydata/model-extraction/data/cifar10_airplane_train.pt"
+    #test_dir = "/mydata/model-extraction/data/cifar10_airplane_test.pt"
 
     # ----------------- Similarity training
     sim_trainset = PositiveNegativeSet(train_dir, normal_transform=test_transform, random_transform=random_transform, dataset=dataset_name)
     sim_valset = PositiveNegativeSet(test_dir, normal_transform=test_transform, random_transform=random_transform, dataset=dataset_name)
     # Replace the last layer
-    model.last_linear = IdLayer().to(device)
-    #if gpu_count > 1:
-    #   model = nn.DataParallel(model)
+    model.fc = IdLayer().to(device)
     model = model.to(device)
     optimizer = get_optimizer(model.parameters(), optimizer_name)
 
@@ -217,9 +217,15 @@ def main():
     sim_epochs = params['sim_epochs']
     adv_train = params['adv_train']
     checkpoint_suffix = ".sim-{:.1f}".format(margin_test)
-    out_path = osp.join(out_path, model_name, "{}-margin-{:.1f}".format(dataset_name, margin_test))
+
+    out_path = osp.join(out_path, model_name)
     if not osp.exists(out_path):
         os.mkdir(out_path)
+
+    out_path = osp.join(out_path, "{}-margin-{:.1f}".format(dataset_name, margin_test))
+    if not osp.exists(out_path):
+        os.mkdir(out_path)
+
     encoder_utils.train_model(model, sim_trainset, out_path, epochs=sim_epochs, testset=sim_valset,
                             criterion_train=margin_train, criterion_test=margin_test,
                             checkpoint_suffix=checkpoint_suffix, device=device, optimizer=optimizer, adv_train=adv_train)

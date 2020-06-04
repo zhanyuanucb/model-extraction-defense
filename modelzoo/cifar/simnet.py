@@ -26,11 +26,11 @@ class SimNet(nn.Module):
             nn.Dropout(p=0.5),
             nn.Linear(512, 256)
         )
-        self.classifier = nn.Linear(256, num_classes)
+        self.fc = nn.Linear(256, num_classes)
 
     def forward(self, x):
         x = self.features(x)
-        x = self.classifier(x)
+        x = self.fc(x)
         return x
 
 

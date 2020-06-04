@@ -36,6 +36,7 @@ gpu_count = torch.cuda.device_count()
 class Blackbox(object):
     def __init__(self, model, return_max_conf=False):
         self.model = model
+        self.model.eval()
         self.return_max_conf = return_max_conf
 
     @classmethod
@@ -58,6 +59,7 @@ class Blackbox(object):
         #if gpu_count > 1:
         #    model = nn.DataParallel(model)
         model = model.to(device)
+        model.eval()
 
         # Load weights
         checkpoint_path = osp.join(model_dir, 'checkpoint.pth.tar')
