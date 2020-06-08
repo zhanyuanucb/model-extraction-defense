@@ -36,6 +36,7 @@ import attack.utils.model as model_utils
 import attack.utils.utils as attack_utils
 import modelzoo.zoo as zoo
 import attack.config as cfg
+from defense.utils import PositiveNegativeSet
 
 __author__ = "Tribhuvanesh Orekondy"
 __author_email__ = "orekondy@mpi-inf.mpg.de"
@@ -43,48 +44,6 @@ __adopted_by__ = "Zhanyuan Zhang"
 __maintainer__ = "Zhanyuan Zhang"
 __maintainer_email__ = "zhang_zhanyuan@berkeley.edu"
 __status__ = "Development"
-
-class TransferSetImagePaths(ImageFolder):
-    """TransferSet Dataset, for when images are stored as *paths*"""
-
-    def __init__(self, samples, transform=None, target_transform=None):
-        self.loader = default_loader
-        self.extensions = IMG_EXTENSIONS
-        self.samples = samples
-        self.targets = [s[1] for s in samples]
-        self.transform = transform
-        self.target_transform = target_transform
-
-class PositiveNegativeSet(VisionDataset):
-    """
-    For data in form of serialized tensor
-    """
-    def __init__(self, load_path, normal_transform=None, random_transform=None, dataset="MNIST"):
-        self.data, self.targets = torch.load(load_path)
-        self.n_samples = self.data.size(0)
-        self.normal_transform = normal_transform
-        self.random_transform = random_transform
-        self.mode = "L" if dataset == "MNIST" else "RGB"
-
-    def __getitem__(self, index):
-        img_pt, y = self.data[index], self.targets[index]
-        img = self.convert(img_pt)
-        ori_img = self.normal_transform(img)
-        ran_img = self.random_transform(img)
-        other_idx = random.choice(list(range(index)) + list(range(index+1, self.n_samples)))
-        img2_pt = self.data[other_idx]
-        img2 = self.convert(img2_pt)
-        other_img = self.normal_transform(img2)
-        return ori_img, ran_img, other_img, y
-
-    def convert(self, image):
-        image *= 255
-        image = Image.fromarray(image.numpy().astype('int8').transpose([1, 2, 0]), mode=self.mode)
-        return image
-
-    def __len__(self):
-        return self.n_samples
-
 
 def get_optimizer(parameters, optimizer_type, lr=0.01, momentum=0.5, **kwargs):
     assert optimizer_type in ['sgd', 'sgdm', 'adam', 'adagrad']
@@ -166,8 +125,6 @@ def main():
     num_classes = params['num_classes']
     model = zoo.get_net(model_name, modelfamily, num_classes=num_classes)
 
-    #if gpu_count > 1:
-    #   model = nn.DataParallel(model)
     model = model.to(device)
 
     train_epochs = params['train_epochs']
@@ -210,7 +167,8 @@ def main():
     # Replace the last layer
     model.fc = IdLayer().to(device)
     model = model.to(device)
-    optimizer = get_optimizer(model.parameters(), optimizer_name)
+    #sim_optimizer = get_optimizer(model.parameters(), optimizer_type="sgdm", lr=1e-4, momentum=0.9)
+    sim_optimizer = get_optimizer(model.parameters(), optimizer_type=optimizer_name)
 
     margin_train = params['margin']
     margin_test = margin_train
@@ -228,7 +186,7 @@ def main():
 
     encoder_utils.train_model(model, sim_trainset, out_path, epochs=sim_epochs, testset=sim_valset,
                             criterion_train=margin_train, criterion_test=margin_test,
-                            checkpoint_suffix=checkpoint_suffix, device=device, optimizer=optimizer, adv_train=adv_train)
+                            checkpoint_suffix=checkpoint_suffix, device=device, optimizer=sim_optimizer, adv_train=adv_train)
 
     params['created_on'] = str(datetime.now())
     params_out_path = osp.join(out_path, f'params_train{checkpoint_suffix}.json')

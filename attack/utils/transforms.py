@@ -38,8 +38,12 @@ class DefaultTransforms:
 class RandomTransforms:
 
     def __init__(self, modelfamily="cifar", normal=False,
-                 rotate_r=0.018, translate_r=0.05, scale_r=0.17, crop_r=0.04,
+                 rotate_r=15, translate_r=0.05, scale_r=0.17, crop_r=0.04,
                  bright_r=0.09, contrast_r=0.55, unif_r=0.064, norm_std=0.095):
+#    def __init__(self, modelfamily="cifar", normal=False,
+#                 rotate_r=45, translate_r=0.45, scale_r=0.40, crop_r=0.3,
+#                 bright_r=0.5, contrast_r=0.55, unif_r=0.1, norm_std=0.1):
+
         self.normal = normal
         if modelfamily == "cifar":
             self.normalize = transforms.Normalize(mean=cfg.CIFAR_MEAN,
@@ -89,7 +93,7 @@ class RandomTransforms:
         self.noise = transforms.RandomChoice(self.noise_candidates)
         num_affine = len(self.candidates)
         num_noise = len(self.noise_candidates)
-        self.noise_weight = num_affine/(num_noise + num_affine) 
+        self.noise_weight = num_noise/(num_noise + num_affine) 
         self.affine_weight = 1 - self.noise_weight
                 
         self.noise = transforms.RandomChoice([transforms.Lambda(lambda x: x + torch.randn_like(x).to(x.device) * self.norm_std),

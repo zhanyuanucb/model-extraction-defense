@@ -142,7 +142,7 @@ def test_step(model, test_loader, margin, device, epoch=0., silent=False):
     return test_loss, p_acc, n_acc
 
 
-def train_model(model, trainset, out_path, batch_size=64, margin_train=np.sqrt(10), margin_test=np.sqrt(10), testset=None,
+def train_model(model, trainset, out_path, batch_size=32, margin_train=np.sqrt(10), margin_test=np.sqrt(10), testset=None,
                 device=None, num_workers=10, lr=0.1, momentum=0.5, lr_step=30, lr_gamma=0.1, resume=None,
                 epochs=100, log_interval=100, checkpoint_suffix='', optimizer=None, scheduler=None, adv_train=False,
                 **kwargs):
@@ -208,17 +208,17 @@ def train_model(model, trainset, out_path, batch_size=64, margin_train=np.sqrt(1
         # Checkpoint
         #if test_acc >= best_test_acc:
         #if test_loss <= best_test_loss: # Compare the loss
-        if test_nacc >= best_test_nacc: # Compare the negative sample accuracy
-            state = {
-                'epoch': epoch,
-                'arch': model.__class__,
-                'state_dict': model.state_dict(),
-                'best_pacc': test_pacc,
-                'best_nacc': test_nacc,
-                'optimizer': optimizer.state_dict(),
-                'created_on': str(datetime.now()),
-            }
-            torch.save(state, model_out_path)
+        #if test_nacc >= best_test_nacc: # Compare the negative sample accuracy
+        state = {
+            'epoch': epoch,
+            'arch': model.__class__,
+            'state_dict': model.state_dict(),
+            'best_pacc': test_pacc,
+            'best_nacc': test_nacc,
+            'optimizer': optimizer.state_dict(),
+            'created_on': str(datetime.now()),
+        }
+        torch.save(state, model_out_path)
 
         # Log
         with open(log_path, 'a') as af:

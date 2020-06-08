@@ -1,7 +1,8 @@
+import random
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset
-from torchvision.datasets.folder import ImageFolder, IMG_EXTENSIONS, default_loader
+from torchvision.datasets.folder import ImageFolder, VisionDataset, IMG_EXTENSIONS, default_loader
 from PIL import Image
 
 class ImageTensorSet(Dataset):
@@ -25,6 +26,36 @@ class ImageTensorSet(Dataset):
 
     def __len__(self):
         return len(self.data)
+
+class PositiveNegativeSet(VisionDataset):
+    """
+    For data in form of serialized tensor
+    """
+    def __init__(self, load_path, normal_transform=None, random_transform=None, dataset="MNIST"):
+        self.data, self.targets = torch.load(load_path)
+        self.n_samples = self.data.size(0)
+        self.normal_transform = normal_transform
+        self.random_transform = random_transform
+        self.mode = "L" if dataset == "MNIST" else "RGB"
+
+    def __getitem__(self, index):
+        img_pt, y = self.data[index], self.targets[index]
+
+        img_pt *= 255
+        img = Image.fromarray(img_pt.numpy().astype('int8').transpose([1, 2, 0]), mode=self.mode)
+        ori_img = self.normal_transform(img)
+        ran_img = self.random_transform(img)
+
+        other_idx = random.choice(list(range(index)) + list(range(index+1, self.n_samples)))
+        img2_pt = self.data[other_idx].clone()
+        img2_pt *= 255
+        img2 = Image.fromarray(img2_pt.numpy().astype('int8').transpose([1, 2, 0]), mode=self.mode)
+        other_img = self.normal_transform(img2)
+
+        return ori_img, ran_img, other_img, y
+
+    def __len__(self):
+        return self.n_samples
 
 class TransferSetImagePaths(ImageFolder):
     """TransferSet Dataset, for when images are stored as *paths*"""
