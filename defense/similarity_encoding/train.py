@@ -33,10 +33,11 @@ import attack.utils.transforms as transform_utils
 from attack.utils.transforms import *
 import defense.similarity_encoding.encoder as encoder_utils
 import attack.utils.model as model_utils
+from model_utils import get_optimizer
 import attack.utils.utils as attack_utils
 import modelzoo.zoo as zoo
 import attack.config as cfg
-from defense.utils import PositiveNegativeSet
+from defense.utils import PositiveNegativeSet, IdLayer
 
 __author__ = "Tribhuvanesh Orekondy"
 __author_email__ = "orekondy@mpi-inf.mpg.de"
@@ -44,26 +45,6 @@ __adopted_by__ = "Zhanyuan Zhang"
 __maintainer__ = "Zhanyuan Zhang"
 __maintainer_email__ = "zhang_zhanyuan@berkeley.edu"
 __status__ = "Development"
-
-def get_optimizer(parameters, optimizer_type, lr=0.01, momentum=0.5, **kwargs):
-    assert optimizer_type in ['sgd', 'sgdm', 'adam', 'adagrad']
-    if optimizer_type == 'sgd':
-        optimizer = optim.SGD(parameters, lr)
-    elif optimizer_type == 'sgdm':
-        optimizer = optim.SGD(parameters, lr, momentum=momentum)
-    elif optimizer_type == 'adagrad':
-        optimizer = optim.Adagrad(parameters)
-    elif optimizer_type == 'adam':
-        optimizer = optim.Adam(parameters)
-    else:
-        raise ValueError('Unrecognized optimizer type')
-    return optimizer
-
-class IdLayer(nn.Module):
-    def __init__(self):
-        super(IdLayer, self).__init__()
-    def forward(self, x):
-        return x
 
 def main():
     parser = argparse.ArgumentParser(description='Train similarity encoder')
