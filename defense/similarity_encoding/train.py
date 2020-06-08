@@ -33,7 +33,7 @@ import attack.utils.transforms as transform_utils
 from attack.utils.transforms import *
 import defense.similarity_encoding.encoder as encoder_utils
 import attack.utils.model as model_utils
-from model_utils import get_optimizer
+from attack.utils.model import get_optimizer
 import attack.utils.utils as attack_utils
 import modelzoo.zoo as zoo
 import attack.config as cfg

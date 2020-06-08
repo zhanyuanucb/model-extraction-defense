@@ -53,7 +53,7 @@ def soft_cross_entropy(pred, soft_targets, weights=None):
     else:
         return torch.mean(torch.sum(- soft_targets * F.log_softmax(pred, dim=1), 1))
 
-def train_step(model, train_loader, margin, optimizer, epoch, device, scheduler, log_interval=10, adv_train=False):
+def train_step(model, train_loader, margin, optimizer, epoch, device, scheduler, loss_fn=nn.MSELoss(), log_interval=10, adv_train=False):
     model.train()
     train_loss = 0.
     p_correct = 0
@@ -70,17 +70,8 @@ def train_step(model, train_loader, margin, optimizer, epoch, device, scheduler,
         o_feat = model(o)
         t_feat = model(t)
         d_feat = model(d)
-        p_dist = torch.norm(o_feat - t_feat, p=2, dim=1)
-        n_dist = torch.norm(o_feat - d_feat, p=2, dim=1)
-        loss = torch.mean(p_dist**2 + F.relu(margin**2 - n_dist**2))
-        if adv_train:
-            o_delta = pgd_linf(model, o, labels)
-            o_adv = o + o_delta
-            adv_feat = model(o_adv)
-            adv_dist = torch.norm(o_feat - adv_feat, p=2, dim=1)
-            loss = torch.mean(p_dist**2 + adv_dist**2 + F.relu(margin**2 - n_dist**2))
-        else:
-            loss = torch.mean(p_dist**2 + F.relu(margin**2 - n_dist**2))
+
+        loss = loss_fn(t_feat, o_feat) + F.relu(margin**2 - loss_fn(d_feat, o_feat))
         loss.backward()
         optimizer.step()
         scheduler.step(epoch)
@@ -88,6 +79,9 @@ def train_step(model, train_loader, margin, optimizer, epoch, device, scheduler,
         train_loss += loss.item()
         total += d.size(0)
 
+        with torch.no_grad():
+            p_dist = torch.norm(o_feat - t_feat, p=2, dim=1)
+            n_dist = torch.norm(o_feat - d_feat, p=2, dim=1)
         p_correct += p_dist.le(margin).sum().item()
         n_correct += n_dist.gt(margin).sum().item()
 
@@ -108,7 +102,7 @@ def train_step(model, train_loader, margin, optimizer, epoch, device, scheduler,
     return train_loss_batch, p_acc, n_acc
 
 
-def test_step(model, test_loader, margin, device, epoch=0., silent=False):
+def test_step(model, test_loader, margin, device, epoch=0., loss_fn=nn.MSELoss(), silent=False):
     model.eval()
     test_loss = 0.
     p_correct = 0
@@ -124,7 +118,7 @@ def test_step(model, test_loader, margin, device, epoch=0., silent=False):
             d_feat = model(d)
             p_dist = torch.norm(o_feat - t_feat, p=2, dim=1)
             n_dist = torch.norm(o_feat - d_feat, p=2, dim=1)
-            loss = torch.mean(p_dist**2 + F.relu(margin**2 - n_dist**2))
+            loss = loss_fn(t_feat, o_feat) + F.relu(margin**2 - loss_fn(d_feat, o_feat))
             test_loss += loss.item()
             total += d.size(0)
             p_correct += p_dist.le(margin).sum().item()
