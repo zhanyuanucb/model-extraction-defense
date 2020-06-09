@@ -87,16 +87,21 @@ gpu_count = torch.cuda.device_count()
 
 # Reference: https://github.com/schoyc/blackbox-detection/blob/master/detection.py#L96
 def calculate_thresholds(training_data, K, encoder=lambda x: x, P=1000, up_to_K=False):
-    #training_data = training_data.to(device)
     with torch.no_grad():
-        data = encoder(training_data).cpu().numpy()
+        data = encoder(training_data).numpy()
+        #data = encoder(training_data)
     distances = []
     for i in range(data.shape[0]//P):
         distance_mat = pairwise.pairwise_distances(data[i * P:(i+1) * P,:], Y=data)
         distance_mat = np.sort(distance_mat, axis=-1)
+
+        #distance_mat = torch.cdist(data[i * P:(i+1) * P,:], data, p=2)
+        #distance_mat, _ = torch.sort(distance_mat, dim=-1)
+        #distance_mat = distance_mat.numpy()
+
         distance_mat_K = distance_mat[:,1:K+1]
-        
         distances.append(distance_mat_K)
+
     distance_matrix = np.concatenate(distances, axis=0)
 
     start = 0 if up_to_K else K
@@ -104,7 +109,7 @@ def calculate_thresholds(training_data, K, encoder=lambda x: x, P=1000, up_to_K=
     THRESHORDS = []
     K_S = []
     for k in range(start, K+1):
-        dist_to_k_neighbors = distance_matrix[:, :k+1]
+        dist_to_k_neighbors = distance_matrix[:, :k]
         #avg_dist_to_k_neighbors = dist_to_k_neighbors.mean(dim=-1).numpy()
         avg_dist_to_k_neighbors = dist_to_k_neighbors.mean(axis=-1)
         threshold = np.percentile(avg_dist_to_k_neighbors, 0.1)

@@ -10,12 +10,12 @@
 #                      --return_conf_max \
 #                      --device_id=0                     
                       
-python benign_user.py -l CIFAR10 \
-                      --encoder_arch_name=vgg16_bn \
+CUDA_VISIBLE_DEVICES=1 python benign_user.py -l CIFAR10 \
+                      --encoder_arch_name=resnet34 \
                       --k=5 \
-                      --thresh=0.5826407364010812 \
-                      --log_suffix=benign_adv_vggbn_cifar_k5 \
-                      --device_id=0
+                      --thresh=0.08149350184947253 \
+                      --log_suffix=benign_resnet \
+                      --device_id=1
 #                      
 # python benign_user.py -l CIFAR10 \
 #                      --encoder_arch_name=wrn28 \
