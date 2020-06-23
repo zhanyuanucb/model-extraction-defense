@@ -10,18 +10,19 @@ import numpy as np
 
 import shutil
 
-#dataset_dir = osp.join(cfg.DATASET_ROOT, "CINIC10/train") 
-dataset_dir = osp.join(cfg.DATASET_ROOT, "cifar10/train") 
-dest_root = osp.join("/mydata/model-extraction/data/cifar10_balanced_subset10000")
+dataset_dir = osp.join(cfg.DATASET_ROOT, "CINIC10_2/train") 
+dest_root = osp.join("/mydata/model-extraction/data/cinic10_balanced_subset35000")
+#dataset_dir = osp.join(cfg.DATASET_ROOT, "cifar10/train") 
+#dest_root = osp.join("/mydata/model-extraction/data/cifar10_balanced_subset10000")
 create_dir(dest_root)
 
 np.random.seed(cfg.DS_SEED)
-SIZE = 1000
+SIZE = 3500
 
 for c in os.listdir(dataset_dir):
     # sample SIZE images from each class
     src_dir = osp.join(dataset_dir, c)
-    image_lst = [image for image in os.listdir(src_dir) if image.split('-')[0] != "cifar10"]
+    image_lst = os.listdir(src_dir)
     sampled_idxs = np.random.choice(list(range(len(image_lst))), replace=False, size=SIZE)
     sampled_images = np.array(image_lst)[sampled_idxs]
     dest_dir = osp.join(dest_root, c)

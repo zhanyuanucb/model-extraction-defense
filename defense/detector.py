@@ -25,7 +25,7 @@ from attack.victim.blackbox import Blackbox
 
 
 class Detector:
-    def __init__(self, k, thresh, encoder, mean, std, buffer_size=1000, log_suffix="", log_dir="./", return_max_conf=False):
+    def __init__(self, k, thresh, encoder, mean, std, num_clusters=50, buffer_size=1000, log_suffix="", log_dir="./"):
         self.blackbox = None
         self.query_count = 0
         self.detection_count = 0
@@ -37,15 +37,17 @@ class Detector:
         self.memory = []
         self.MEAN = torch.Tensor(mean).reshape([1, 3, 1, 1])
         self.STD = torch.Tensor(std).reshape([1, 3, 1, 1])
-        self.return_max_conf = return_max_conf
+        self.num_clusters = num_clusters
 
+        # Debug
+        #self.log_dir = log_dir
         self.log_file = osp.join(log_dir, f"detector.{log_suffix}.log.tsv")
     
     def init(self, blackbox_dir, device, time=None):
         self.device = device
         self.MEAN = self.MEAN.to(self.device)
         self.STD = self.STD.to(self.device)
-        self.blackbox = Blackbox.from_modeldir(blackbox_dir, device, return_max_conf=self.return_max_conf)
+        self.blackbox = Blackbox.from_modeldir(blackbox_dir, device)
         self._init_log(time)
     
     def _process(self, images):
@@ -91,7 +93,8 @@ class Detector:
         if is_attack:
             self.detection_count += 1
             self._write_log(k_avg_dist)
-            self.clear_memory()
+            if self.detection_count % self.num_clusters == 0:
+                self.clear_memory()
         return is_attack
 
     def clear_memory(self):
@@ -109,7 +112,10 @@ class Detector:
 
     def _write_log(self, detected_dist):
         with open(self.log_file, 'a') as log:
-            columns = [str(self.query_count), str(self.detection_count), str(detected_dist)]
+            if self.detection_count % self.num_clusters == 0:
+                columns = ["*"+str(self.query_count), str(self.detection_count), str(detected_dist)]
+            else:
+                columns = [str(self.query_count), str(self.detection_count), str(detected_dist)]
             log.write('\t'.join(columns) + '\n')
     
     def __call__(self, images):
@@ -117,8 +123,5 @@ class Detector:
         # ---- Going through detection
         is_adv = self._process(images)
         # ----------------------------
-        if self.return_max_conf:
-            output, conf_max = self.blackbox(images)
-            return is_adv, output, conf_max
         output = self.blackbox(images)
         return is_adv, output

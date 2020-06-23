@@ -110,7 +110,6 @@ def calculate_thresholds(training_data, K, encoder=lambda x: x, P=1000, up_to_K=
     K_S = []
     for k in range(start, K+1):
         dist_to_k_neighbors = distance_matrix[:, :k]
-        #avg_dist_to_k_neighbors = dist_to_k_neighbors.mean(dim=-1).numpy()
         avg_dist_to_k_neighbors = dist_to_k_neighbors.mean(axis=-1)
         threshold = np.percentile(avg_dist_to_k_neighbors, 0.1)
         K_S.append(k)
@@ -203,8 +202,9 @@ def main():
             print(f"Save plot to {osp.join(out_dir, f'k_thresh_plot_{encoder_name}.png')}")
 
             with open(osp.join(out_dir, 'k_n_thresh.pkl'), 'wb') as file:
-                print(f"Results save to {osp.join(out_dir, 'k_n_thresh.pkl')}")
+                print(f"Results saved to {osp.join(out_dir, 'k_n_thresh.pkl')}")
                 pickle.dump([ks, thresholds], file)
+
 
 if __name__ == '__main__':
     main()

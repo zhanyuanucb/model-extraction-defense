@@ -115,7 +115,10 @@ def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
 class IdLayer(nn.Module):
-    def __init__(self):
+    def __init__(self, activation=None):
         super(IdLayer, self).__init__()
+        self.activation = activation
     def forward(self, x):
+        if self.activation is not None:
+            return self.activation(x)
         return x

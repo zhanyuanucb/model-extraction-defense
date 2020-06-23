@@ -34,13 +34,12 @@ __status__ = "Development"
 gpu_count = torch.cuda.device_count()
 
 class Blackbox(object):
-    def __init__(self, model, return_max_conf=False):
+    def __init__(self, model):
         self.model = model
         self.model.eval()
-        self.return_max_conf = return_max_conf
 
     @classmethod
-    def from_modeldir(cls, model_dir, device=None, return_max_conf=False):
+    def from_modeldir(cls, model_dir, device=None):
         device = torch.device('cuda') if device is None else device
 
         # What was the model architecture used by this model?
@@ -53,11 +52,7 @@ class Blackbox(object):
         modelfamily = datasets.dataset_to_modelfamily[victim_dataset]
 
         # Instantiate the model
-        # model = model_utils.get_net(model_arch, n_output_classes=num_classes)
         model = zoo.get_net(model_arch, modelfamily, pretrained=None, num_classes=num_classes)
-        # TODO: Multi-GPU 
-        #if gpu_count > 1:
-        #    model = nn.DataParallel(model)
         model = model.to(device)
         model.eval()
 
@@ -72,7 +67,6 @@ class Blackbox(object):
 
         blackbox = cls(model)
         blackbox.device = device
-        blackbox.return_max_conf = return_max_conf
         return blackbox
 
     def __call__(self, images):
@@ -81,9 +75,6 @@ class Blackbox(object):
             logits = self.model(images)
         topk_vals, indices = torch.topk(logits, 1)
         y = torch.zeros_like(logits)
-        if self.return_max_conf:
-            conf_max, _ = F.softmax(logits, dim=1).max(dim=1)
-            return y.scatter(1, indices, torch.ones_like(topk_vals)), conf_max
 
         return y.scatter(1, indices, torch.ones_like(topk_vals))
         #return F.softmax(logits, dim=1)

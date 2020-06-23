@@ -61,9 +61,12 @@ class MultiStepJDA:
         conf_list = []
         for images, labels in dataloader:
             self.reset_v(input_shape=images.shape)
-            images, labels = images.to(self.device), labels.to(self.device)
             if self.blinders_fn is not None:
+                images = images * self.STD + self.MEAN
+                images = torch.clamp(images, 0., 1.)
                 images = self.blinders_fn(images)
+                images = (images - self.MEAN) / self.STD
+            images, labels = images.to(self.device), labels.to(self.device)
             for i in range(self.steps):
                 images = Variable(images, requires_grad=True)
                 images = self.augment_step(images, labels)
@@ -75,6 +78,7 @@ class MultiStepJDA:
                 conf_list.append(conf_max.clone())
             else:
                 is_adv, y = self.blackbox(images)  # Inspection
+                #y = self.blackbox(images)  # Inspection
             labels_aug.append(y.cpu().clone())
         self.steps += self.delta_step
         if self.return_conf_max:

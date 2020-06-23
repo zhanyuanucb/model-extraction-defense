@@ -173,7 +173,7 @@ def train_model(model, trainset, out_path, batch_size=64, criterion_train=None, 
     run_id = str(datetime.now())
 
     # Data loaders
-    train_loader = DataLoader(trainset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
+    train_loader = DataLoader(trainset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
     if testset is not None:
         test_loader = DataLoader(testset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
     else:

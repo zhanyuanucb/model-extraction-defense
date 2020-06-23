@@ -145,11 +145,13 @@ def main():
     # ----------------- Similarity training
     sim_trainset = PositiveNegativeSet(train_dir, normal_transform=test_transform, random_transform=random_transform, dataset=dataset_name)
     sim_valset = PositiveNegativeSet(test_dir, normal_transform=test_transform, random_transform=random_transform, dataset=dataset_name)
+
     # Replace the last layer
-    model.fc = IdLayer().to(device)
+    model.fc = IdLayer(activation=nn.Sigmoid()).to(device)
     model = model.to(device)
-    #sim_optimizer = get_optimizer(model.parameters(), optimizer_type="sgdm", lr=1e-4, momentum=0.9)
-    sim_optimizer = get_optimizer(model.parameters(), optimizer_type=optimizer_name)
+
+    # Setup optimizer
+    sim_optimizer = get_optimizer(model.parameters(), optimizer_type="sgdm", lr=1e-4, momentum=0.9)
 
     margin_train = params['margin']
     margin_test = margin_train

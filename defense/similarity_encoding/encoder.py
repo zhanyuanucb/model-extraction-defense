@@ -46,7 +46,10 @@ def pgd_linf(model, x, y, eps=0.1, alpha=0.01, num_iter=20, criterion=nn.CrossEn
         delta.grad.zero_()
     return delta.detach()
 
-
+def lossless_triplet(o_feat, t_feat, d_feat, dist=nn.MSELoss(), eps=1e-8):
+    N = o_feat.size(-1)
+    return -torch.log(-dist(t_feat, o_feat)/N + 1 + eps) - torch.log(-(N-dist(d_feat, o_feat))/N + 1 + eps)
+    
 def soft_cross_entropy(pred, soft_targets, weights=None):
     if weights is not None:
         return torch.mean(torch.sum(- soft_targets * F.log_softmax(pred, dim=1) * weights, 1))
@@ -71,7 +74,10 @@ def train_step(model, train_loader, margin, optimizer, epoch, device, scheduler,
         t_feat = model(t)
         d_feat = model(d)
 
-        loss = loss_fn(t_feat, o_feat) + F.relu(margin**2 - loss_fn(d_feat, o_feat))
+        #loss = loss_fn(t_feat, o_feat) + F.relu(margin**2 - loss_fn(d_feat, o_feat))
+
+        loss = lossless_triplet(o_feat, t_feat, d_feat, dist=loss_fn)
+
         loss.backward()
         optimizer.step()
         scheduler.step(epoch)
