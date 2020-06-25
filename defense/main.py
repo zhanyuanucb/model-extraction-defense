@@ -55,6 +55,8 @@ def main():
     parser.add_argument("--encoder_arch_name", metavar="TYPE", type=str, default="simnet")
     parser.add_argument("--encoder_ckp", metavar="PATH", type=str,
                         default="/mydata/model-extraction/model-extraction-defense/defense/similarity_encoding/")
+#    parser.add_argument("--encoder_ckp", metavar="PATH", type=str,
+#                        default=None)
     parser.add_argument("--encoder_margin", metavar="TYPE", type=float, default=3.2)
     parser.add_argument("--k", metavar="TYPE", type=int, default=5)
     parser.add_argument("--thresh", metavar="TYPE", type=float, help="detector threshold", default=0.16197727304697038)
@@ -112,7 +114,7 @@ def main():
         blackbox = Detector(k, thresh, encoder, MEAN, STD, log_suffix=log_suffix, log_dir=log_dir)
         blackbox.init(blackbox_dir, device, time=created_on)
     else:
-        blackbox = Blackbox.from_modeldir(blackbox_dir, device, return_max_conf=return_conf_max)
+        blackbox = Blackbox.from_modeldir(blackbox_dir, device)
 
     # ----------- Initialize adversary model
     model_name = params["model_name"]
@@ -192,6 +194,7 @@ def main():
     checkpoint_suffix = '.budget{}'.format(budget)
     testloader = testset
     epochs = params["epochs"]
+    best_test_acc = -1
     num_workers = 10
     #train_loader = DataLoader(substitute_set, batch_size=batch_size, shuffle=True, num_workers=num_workers)
     aug_loader = DataLoader(substitute_set, batch_size=batch_size, shuffle=True, num_workers=num_workers)
@@ -220,11 +223,13 @@ def main():
 
         print(f"Substitute training epoch {p}")
         print(f"Current size of the substitute set {len(substitute_set)}")
-        best_test_acc, train_loader = model_utils.train_model(model, substitute_set, ckp_out_root, batch_size=batch_size, epochs=epochs, testset=testloader, criterion_train=criterion_train,
+        test_acc, train_loader = model_utils.train_model(model, substitute_set, ckp_out_root, batch_size=batch_size, epochs=epochs, testset=testloader, criterion_train=criterion_train,
                                                   checkpoint_suffix=checkpoint_suffix, device=device, optimizer=optimizer)
+        best_test_acc = max(test_acc, best_test_acc)
 
     # Store arguments
     params['budget'] = images_sub.size(0)
+    params['best_adv_acc'] = best_test_acc
     params_out_path = osp.join(ckp_out_root, 'params_train.json')
     with open(params_out_path, 'w') as jf:
         json.dump(params, jf, indent=True)

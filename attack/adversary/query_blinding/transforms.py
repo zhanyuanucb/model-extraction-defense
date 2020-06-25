@@ -37,13 +37,13 @@ def get_gaussian_noise(device="cpu", r=0.095):
 
 def get_random_contrast(device="cpu", r="low"):
     if r == "high":
-        r = 0.55
+        r = 0.1
     if r == "low":
-        r = 0.05
+        r = 0.55
     def contrast_random(x):
         #alpha = np.random.uniform(min_alpha, max_alpha)
         alpha = torch.rand((x.size(0), 1, 1, 1)).to(x.device)
-        alpha = alpha*2*r - r
+        alpha = alpha*(1-r) + r
         x_t = torch.clamp(x*alpha, 0., 1.)
 
         return x_t

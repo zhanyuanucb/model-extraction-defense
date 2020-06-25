@@ -25,5 +25,5 @@
 python getseed.py /mydata/model-extraction/model-extraction-defense/attack/victim/models/cifar10/wrn28 \
                   --out_dir /mydata/model-extraction/model-extraction-defense/attack/adversary/models/cifar10 \
                   --seedset_name=CINIC10 \
-                  --seedset_dir=/mydata/model-extraction/data/cinic10_balanced_subset35000 \
+                  --seedset_dir=/mydata/model-extraction/data/cinic10_balanced_subset65000 \
                   --batch_size=128
