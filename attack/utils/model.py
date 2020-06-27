@@ -99,7 +99,7 @@ def train_step(model, train_loader, criterion, optimizer, epoch, device, schedul
         loss = criterion(outputs, targets)
         loss.backward()
         optimizer.step()
-        scheduler.step(epoch)
+        scheduler.step()
 
         train_loss += loss.item()
         _, predicted = outputs.max(1)
