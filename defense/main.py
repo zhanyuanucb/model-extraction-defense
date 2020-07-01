@@ -254,6 +254,7 @@ def main():
     # Store arguments
     params['budget'] = images_sub.size(0)
     params['best_adv_acc'] = best_test_acc
+    params['num_detections'] = blackbox.alarm_count
     params_out_path = osp.join(ckp_out_root, 'params_train.json')
     with open(params_out_path, 'w') as jf:
         json.dump(params, jf, indent=True)
