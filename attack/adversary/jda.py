@@ -25,6 +25,18 @@ class MultiStepJDA:
         self.STD = torch.Tensor(std).reshape([1, 3, 1, 1]).to(device)
         self.device = device
     
+    def get_seedset(self, dataloader):
+        images, labels = [], []
+        for x_t, _ in dataloader:
+            x_t = x_t.cuda()
+            is_adv, y_t = self.blackbox(x_t)
+            y_t = y_t.cpu()
+            images.append(x_t.cpu())
+            labels.append(y_t)
+
+        seedset = [torch.cat(images), torch.cat(labels)]
+        return seedset
+
     def reset_v(self, input_shape):
         self.v = torch.zeros(input_shape, dtype=torch.float32).to(self.device)
 

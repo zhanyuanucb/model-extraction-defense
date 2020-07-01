@@ -31,18 +31,18 @@ def main():
     parser.add_argument("--num_classes", metavar="TYPE", type=int, default=10)
     parser.add_argument("--batch_size", metavar="TYPE", type=int, default=32)
     parser.add_argument("--blackbox_dir", metavar="PATH", type=str,
-                        default="/mydata/model-extraction/model-extraction-defense/attack/victim/models/cifar10/wrn28")
+                        default="/mydata/model-extraction/model-extraction-defense/attack/victim/models/cifar10/wrn28_2")
     parser.add_argument("-l", "--testset_names", nargs='+', type=str, required=True)
     parser.add_argument("--encoder_arch_name", metavar="TYPE", type=str, default="simnet")
     parser.add_argument("--encoder_ckp", metavar="PATH", type=str,
                         default="/mydata/model-extraction/model-extraction-defense/defense/similarity_encoding/")
     parser.add_argument("--encoder_margin", metavar="TYPE", type=float, default=3.2)
-    parser.add_argument("--k", metavar="TYPE", type=int, default=5)
-    parser.add_argument("--thresh", metavar="TYPE", type=float, help="detector threshold", default=0.16197727304697038)
+    parser.add_argument('--activation', metavar='TYPE', type=str, help='Activation name', default=None)
+    parser.add_argument("--k", metavar="TYPE", type=int, default=1)
+    parser.add_argument("--thresh", metavar="TYPE", type=float, help="detector threshold", default=0.0012760052197845653)
     parser.add_argument("--log_suffix", metavar="TYPE", type=str, default="benign")
     parser.add_argument("--log_dir", metavar="PATH", type=str,
                         default="./")
-    parser.add_argument("--return_conf_max", action="store_true")
     parser.add_argument("--device_id", metavar="TYPE", type=int, default=0)
     args = parser.parse_args()
     params = vars(args)
@@ -66,10 +66,17 @@ def main():
     create_dir(log_dir)
 
     encoder_arch_name = params["encoder_arch_name"]
-    return_conf_max = params["return_conf_max"]
     num_classes = 10
     encoder = zoo.get_net(encoder_arch_name, "cifar", num_classes=num_classes)
-    encoder.fc = IdLayer()
+    activation_name = params['activation']
+    if activation_name == "sigmoid":
+        activation = nn.Sigmoid()
+        print(f"Encoder activation: {activation_name}")
+    else:
+        print("Normal activation")
+        activation = None
+    encoder.fc = IdLayer(activation=activation)
+    #encoder.fc = IdLayer(activation=nn.Sigmoid()).to(device)
     MEAN, STD = cfg.NORMAL_PARAMS["cifar"]
 
     # ----------- Setup Similarity Encoder
@@ -84,11 +91,13 @@ def main():
         start_epoch = checkpoint['epoch']
         encoder.load_state_dict(checkpoint['state_dict'])
         print("===> loaded checkpoint (epoch {})".format(checkpoint['epoch']))
+        print(f"==> Loaded encoder: arch_name: {encoder_arch_name} \n margin: {encoder_margin} \n thresh: {thresh}")
 
         encoder = encoder.to(device)
         encoder.eval()
 
-        blackbox = Detector(k, thresh, encoder, MEAN, STD, log_suffix=log_suffix, log_dir=log_dir, return_max_conf=return_conf_max)
+        blackbox = Detector(k, thresh, encoder, MEAN, STD, log_suffix=log_suffix, log_dir=log_dir)
+        print(f"threshold {blackbox.thresh}, k {k}")
         blackbox.init(blackbox_dir, device, time=created_on)
     else:
         blackbox = Blackbox.from_modeldir(blackbox_dir, device)
@@ -117,49 +126,25 @@ def main():
         test_loader = DataLoader(testset, batch_size=batch_size, shuffle=True)
 
         total_train, correct_train = 0, 0
-        if return_conf_max:
-            for images, labels in train_loader:
-                labels = labels.to(device)
-                is_adv, y, conf_max = blackbox(images)
-                _, predicted = y.max(1)
-                correct_train += predicted.eq(labels).sum().item()
-                total_train += labels.size(0)
-                conf_list.append(conf_max.clone())
-            print("=> Train accuracy: {:.2f}".format(correct_train/total_train))
-            total_val, correct_val = 0, 0
-            for images, labels in test_loader:
-                labels = labels.to(device)
-                is_adv, y, conf_max = blackbox(images)
-                _, predicted = y.max(1)
-                correct_val += predicted.eq(labels).sum().item()
-                total_val += labels.size(0)
-                conf_list.append(conf_max.clone())
-            print("=> Validation accuracy: {:.2f}".format(correct_val/total_val))
-        else:
-            for images, labels in train_loader:
-                labels = labels.to(device)
-                is_adv, y = blackbox(images)
-                _, predicted = y.max(1)
-                correct_train += predicted.eq(labels).sum().item()
-                total_train += labels.size(0)
-            print("=> Train accuracy: {:.2f}".format(correct_train/total_train))
-            total_val, correct_val = 0, 0
-            for images, labels in test_loader:
-                labels = labels.to(device)
-                is_adv, y = blackbox(images)
-                _, predicted = y.max(1)
-                correct_val += predicted.eq(labels).sum().item()
-                total_val += labels.size(0)
-            print("=> Validation accuracy: {:.2f}".format(correct_val/total_val))
-    if return_conf_max:
-        conf_list = torch.cat(conf_list).cpu().numpy()
-        plt.hist(conf_list, bins=50, density=True)
-        plt.title(f"Histogram of blackbox prediction confidence (benign user)")
-        plt.savefig(osp.join(log_dir, 'conf_hist.png'))
-        torch.save(conf_list, osp.join(log_dir, 'conf_list.pkl'))
+        for images, labels in train_loader:
+            labels = labels.to(device)
+            is_adv, y = blackbox(images)
+            _, predicted = y.max(1)
+            correct_train += predicted.eq(labels).sum().item()
+            total_train += labels.size(0)
+        print("=> Train accuracy: {:.2f}".format(correct_train/total_train))
+        total_val, correct_val = 0, 0
+        for images, labels in test_loader:
+            labels = labels.to(device)
+            is_adv, y = blackbox(images)
+            _, predicted = y.max(1)
+            correct_val += predicted.eq(labels).sum().item()
+            total_val += labels.size(0)
+        print("=> Validation accuracy: {:.2f}".format(correct_val/total_val))
 
+    params["num_detection"] = blackbox.alarm_count
     # Store arguments
-    params_out_path = osp.join(log_dir, 'params_train.json')
+    params_out_path = osp.join(log_dir, 'params_benign.json')
     with open(params_out_path, 'w') as jf:
         json.dump(params, jf, indent=True)
 

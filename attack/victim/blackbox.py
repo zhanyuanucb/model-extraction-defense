@@ -78,3 +78,5 @@ class Blackbox(object):
 
         return y.scatter(1, indices, torch.ones_like(topk_vals))
         #return F.softmax(logits, dim=1)
+        #T, p = 1, F.softmax(logits, dim=1)
+        #return F.softmax(p.pow(T), dim=1)

@@ -69,12 +69,12 @@ def soft_cross_entropy(pred, soft_targets, weights=None):
 def sim_loss(o_feat, t_feat, d_feat, margin=np.sqrt(10)):
     return torch.mean(torch.norm(o_feat - t_feat, p=2, dim=1)**2 + F.relu(margin**2 - torch.norm(o_feat - d_feat, p=2, dim=1)**2))
 
-def get_optimizer(parameters, optimizer_type, lr=0.01, momentum=0.5, **kwargs):
+def get_optimizer(parameters, optimizer_type, lr=0.01, momentum=0.9, **kwargs):
     assert optimizer_type in ['sgd', 'sgdm', 'adam', 'adagrad']
     if optimizer_type == 'sgd':
         optimizer = optim.SGD(parameters, lr)
     elif optimizer_type == 'sgdm':
-        optimizer = optim.SGD(parameters, lr, momentum=momentum)
+        optimizer = optim.SGD(parameters, lr, momentum=momentum, dampening=0, weight_decay=1e-4, nesterov=True)
     elif optimizer_type == 'adagrad':
         optimizer = optim.Adagrad(parameters)
     elif optimizer_type == 'adam':
@@ -99,7 +99,7 @@ def train_step(model, train_loader, criterion, optimizer, epoch, device, schedul
         loss = criterion(outputs, targets)
         loss.backward()
         optimizer.step()
-        scheduler.step()
+        scheduler.step(epoch)
 
         train_loss += loss.item()
         _, predicted = outputs.max(1)
@@ -164,7 +164,7 @@ def test_step(model, test_loader, criterion, device, epoch=0., silent=False):
 def train_model(model, trainset, out_path, batch_size=64, criterion_train=None, criterion_test=None, testset=None,
                 device=None, num_workers=10, lr=0.1, momentum=0.5, lr_step=30, lr_gamma=0.1, resume=None,
                 epochs=100, log_interval=100, weighted_loss=False, checkpoint_suffix='', optimizer=None, scheduler=None,
-                callback=None,
+                callback=None, benchmark=None,
                 **kwargs):
     if device is None:
         device = torch.device('cuda')
@@ -244,15 +244,27 @@ def train_model(model, trainset, out_path, batch_size=64, criterion_train=None, 
 
         # Checkpoint
         if test_acc >= best_test_acc:
-            state = {
-                'epoch': epoch,
-                'arch': model.__class__,
-                'state_dict': model.state_dict(),
-                'best_acc': test_acc,
-                'optimizer': optimizer.state_dict(),
-                'created_on': str(datetime.now()),
-            }
-            torch.save(state, model_out_path)
+            if benchmark: # If set a banchmark, then only save ckpt if better than the benchmark
+                if best_test_acc >= benchmark:
+                    state = {
+                        'epoch': epoch,
+                        'arch': model.__class__,
+                        'state_dict': model.state_dict(),
+                        'best_acc': test_acc,
+                        'optimizer': optimizer.state_dict(),
+                        'created_on': str(datetime.now()),
+                    }
+                    torch.save(state, model_out_path)
+            else:
+                state = {
+                    'epoch': epoch,
+                    'arch': model.__class__,
+                    'state_dict': model.state_dict(),
+                    'best_acc': test_acc,
+                    'optimizer': optimizer.state_dict(),
+                    'created_on': str(datetime.now()),
+                }
+                torch.save(state, model_out_path)
 
         # Log
         with open(log_path, 'a') as af:

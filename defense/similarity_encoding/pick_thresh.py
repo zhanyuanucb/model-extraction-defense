@@ -36,6 +36,7 @@ import attack.utils.model as model_utils
 import attack.utils.utils as attack_utils
 import modelzoo.zoo as zoo
 import attack.config as cfg
+from defense.utils import IdLayer
 
 __author__ = "Tribhuvanesh Orekondy"
 __author_email__ = "orekondy@mpi-inf.mpg.de"
@@ -43,12 +44,6 @@ __adopted_by__ = "Zhanyuan Zhang"
 __maintainer__ = "Zhanyuan Zhang"
 __maintainer_email__ = "zhang_zhanyuan@berkeley.edu"
 __status__ = "Development"
-
-class IdLayer(nn.Module):
-    def __init__(self):
-        super(IdLayer, self).__init__()
-    def forward(self, x):
-        return x
 
 def get_pathset(src_set):
     pathset = []
@@ -104,7 +99,7 @@ def calculate_thresholds(training_data, K, encoder=lambda x: x, P=1000, up_to_K=
 
     distance_matrix = np.concatenate(distances, axis=0)
 
-    start = 0 if up_to_K else K
+    start = 1 if up_to_K else K
 
     THRESHORDS = []
     K_S = []
@@ -122,6 +117,8 @@ def main():
                         help='Destination directory to store trained model', default="/mydata/model-extraction/model-extraction-defense/defense/similarity_encoding")
     parser.add_argument('--dataset_name', metavar='TYPE', type=str, help='Name of adversary\'s dataset (P_A(X))', default='MNIST')
     parser.add_argument('--model_name', metavar='TYPE', type=str, help='Model name', default="simnet")
+    parser.add_argument('--activation', metavar='TYPE', type=str, help='Activation name', default=None)
+    parser.add_argument("--margins", nargs='+', type=float, required=True)
     parser.add_argument('--num_classes', metavar='TYPE', type=int, help='Number of classes', default=10)
     parser.add_argument('--out_dir', metavar='TYPE', type=str, help='Save output to where', default="/mydata/model-extraction/model-extraction-defense/defense/similarity_encoding")
     parser.add_argument('--K', metavar='TYPE', type=int, help="K nearest neighbors", default=1000)
@@ -165,13 +162,20 @@ def main():
 
     # ---------------- Calculate thresholds for each encoder
     for train_data, _ in train_loader:
-        for margin in [3.2]:
+        for margin in params["margins"]:
             encoder_name = f"{dataset_name}-margin-{margin}"
             # ----------- Load Encoder
             model_name = params['model_name']
             num_classes = params['num_classes']
+            activation_name = params['activation']
+            if activation_name == "sigmoid":
+                activation = nn.Sigmoid()
+                print(f"Encoder activation: {activation_name}")
+            else:
+                print("Normal activation")
+                activation = None
             model = zoo.get_net(model_name, modelfamily, num_classes=num_classes)
-            model.fc = IdLayer()
+            model.fc = IdLayer(activation=activation)
             ckp = params['ckp_dir']
             ckp = osp.join(ckp, model_name, encoder_name, f"checkpoint.sim-{margin}.pth.tar")
             if osp.isfile(ckp):

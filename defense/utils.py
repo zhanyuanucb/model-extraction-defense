@@ -31,7 +31,7 @@ class PositiveNegativeSet(VisionDataset):
     """
     For data in form of serialized tensor
     """
-    def __init__(self, load_path, normal_transform=None, random_transform=None, dataset="MNIST"):
+    def __init__(self, load_path, normal_transform=None, random_transform=None, dataset="CIFAR10"):
         self.data, self.targets = torch.load(load_path)
         self.n_samples = self.data.size(0)
         self.normal_transform = normal_transform
@@ -53,6 +53,43 @@ class PositiveNegativeSet(VisionDataset):
         other_img = self.normal_transform(img2)
 
         return ori_img, ran_img, other_img, y
+
+    def __len__(self):
+        return self.n_samples
+
+class BlinderPositiveNegativeSet(VisionDataset):
+    """
+    For data in form of serialized tensor
+    """
+    def __init__(self, load_path, encoder, device="cpu", normal_transform=None, random_transform=None, dataset="CIFAR10"):
+        self.data, self.targets = torch.load(load_path)
+        self.n_samples = self.data.size(0)
+        self.normal_transform = normal_transform
+        self.random_transform = random_transform
+        self.mode = "L" if dataset == "MNIST" else "RGB"
+        self.encoder = encoder
+        self.device = device
+
+    def __getitem__(self, index):
+        img_pt, y = self.data[index], self.targets[index]
+
+        img = img_pt*255
+        img = Image.fromarray(img.numpy().astype('int8').transpose([1, 2, 0]), mode=self.mode)
+        ori_img = self.normal_transform(img)
+
+        with torch.no_grad():
+            img_blinder = torch.clamp(self.encoder(img_pt[None].to(self.device)), 0., 1.)
+        img_blinder = img_blinder[0]*255
+        img_blinder = Image.fromarray(img_blinder.cpu().numpy().astype('int8').transpose([1, 2, 0]), mode=self.mode)
+        img_blinder = self.normal_transform(img_blinder)
+
+        other_idx = random.choice(list(range(index)) + list(range(index+1, self.n_samples)))
+        img2_pt = self.data[other_idx].clone()
+        img2_pt *= 255
+        img2 = Image.fromarray(img2_pt.numpy().astype('int8').transpose([1, 2, 0]), mode=self.mode)
+        other_img = self.normal_transform(img2)
+
+        return ori_img, img_blinder, other_img, y
 
     def __len__(self):
         return self.n_samples

@@ -11,7 +11,7 @@ import json
 from datetime import datetime
 import sys
 sys.path.append('/mydata/model-extraction/model-extraction-defense/')
-
+sys.path.append('/mydata/model-extraction/model-extraction-defense/attack/adversary/query_blinding')
 import numpy as np
 import random
 
@@ -37,7 +37,9 @@ from attack.utils.model import get_optimizer
 import attack.utils.utils as attack_utils
 import modelzoo.zoo as zoo
 import attack.config as cfg
-from defense.utils import PositiveNegativeSet, IdLayer
+from defense.utils import PositiveNegativeSet, IdLayer, BlinderPositiveNegativeSet
+from attack.adversary.query_blinding.blinders import AutoencoderBlinders
+import attack.adversary.query_blinding.transforms as blinders_transforms
 
 __author__ = "Tribhuvanesh Orekondy"
 __author_email__ = "orekondy@mpi-inf.mpg.de"
@@ -59,12 +61,15 @@ def main():
     parser.add_argument('--train_epochs', metavar='TYPE', type=int, help='Training epochs', default=100)
     parser.add_argument('--sim_epochs', metavar='TYPE', type=int, help='Training epochs', default=50)
     parser.add_argument('--sim_norm', action='store_true')
+    parser.add_argument('--activation', metavar='TYPE', type=str, help='Activation name', default=None)
     parser.add_argument('--adv_train', action='store_true')
     parser.add_argument('--callback', metavar='TYPE', type=float, help='Stop training once val acc meets requirement', default=None)
     parser.add_argument('--optimizer_name', metavar='TYPE', type=str, help='Optimizer name', default="adam")
     parser.add_argument('--ckpt_suffix', metavar='TYPE', type=str, default="")
     parser.add_argument('--margin', type=lambda x: np.sqrt(int(x)))
     parser.add_argument('--load_pretrained', action='store_true')
+    parser.add_argument('--blinders_dir', metavar='PATH', type=str, default="/mydata/model-extraction/model-extraction-defense/attack/adversary/query_blinding/autoencoder_blind/phase2_cinic10_0_")
+    parser.add_argument('--resume', metavar='PATH', type=str, default=None)
 
     # ----------- Other params
     parser.add_argument('-d', '--device_id', metavar='D', type=int, help='Device id', default=0)
@@ -139,15 +144,46 @@ def main():
     # Build dataset for Positive/Negative samples
     train_dir = cfg.dataset2dir[dataset_name]["train"]
     test_dir = cfg.dataset2dir[dataset_name]["test"]
-    #train_dir = "/mydata/model-extraction/data/cifar10_airplane_train.pt"
-    #test_dir = "/mydata/model-extraction/data/cifar10_airplane_test.pt"
 
     # ----------------- Similarity training
-    sim_trainset = PositiveNegativeSet(train_dir, normal_transform=test_transform, random_transform=random_transform, dataset=dataset_name)
-    sim_valset = PositiveNegativeSet(test_dir, normal_transform=test_transform, random_transform=random_transform, dataset=dataset_name)
+    #sim_trainset = PositiveNegativeSet(train_dir, normal_transform=test_transform, random_transform=random_transform, dataset=dataset_name)
+    #sim_valset = PositiveNegativeSet(test_dir, normal_transform=test_transform, random_transform=random_transform, dataset=dataset_name)
+
+    blinders_dir = params["blinders_dir"]
+    if blinders_dir is not None:
+        blinders_ckp = osp.join(blinders_dir, "checkpoint.blind.pth.tar")
+        if osp.isfile(blinders_ckp):
+            blinders_noise_fn = blinders_transforms.get_gaussian_noise(device=device, r=0.095)
+            auto_encoder = AutoencoderBlinders(blinders_noise_fn)
+            print("=> Loading auto-encoder checkpoint '{}'".format(blinders_ckp))
+            checkpoint = torch.load(blinders_ckp, map_location=device)
+            start_epoch = checkpoint['epoch']
+            best_test_loss = checkpoint['best_loss']
+            auto_encoder.load_state_dict(checkpoint['state_dict'])
+            print("===> loaded checkpoint (epoch {})".format(checkpoint['epoch']))
+            print(f"===> Best val loss: {best_test_loss}")
+            #auto_encoder = auto_encoder.to(device)
+            auto_encoder.eval()
+        else:
+            print(f"Can't find auto-encoder ckp at {blinders_ckp}")
+            exit(1)
+    sim_trainset = BlinderPositiveNegativeSet(train_dir, auto_encoder,
+                                     normal_transform=test_transform,
+                                     random_transform=random_transform)
+    sim_valset = BlinderPositiveNegativeSet(test_dir, auto_encoder,
+                                     normal_transform=test_transform,
+                                     random_transform=random_transform)
 
     # Replace the last layer
-    model.fc = IdLayer(activation=nn.Sigmoid()).to(device)
+    #model.fc = IdLayer(activation=nn.Sigmoid()).to(device)
+    activation_name = params['activation']
+    if activation_name == "sigmoid":
+        activation = nn.Sigmoid()
+        print(f"Encoder activation: {activation_name}")
+    else:
+        print("Normal activation")
+        activation = None
+    model.fc = IdLayer(activation=activation).to(device)
     model = model.to(device)
 
     # Setup optimizer
@@ -158,6 +194,7 @@ def main():
     sim_epochs = params['sim_epochs']
     adv_train = params['adv_train']
     checkpoint_suffix = ".sim-{:.1f}".format(margin_test)
+    resume = params["resume"]
 
     out_path = osp.join(out_path, model_name)
     if not osp.exists(out_path):
@@ -169,7 +206,7 @@ def main():
 
     encoder_utils.train_model(model, sim_trainset, out_path, epochs=sim_epochs, testset=sim_valset,
                             criterion_train=margin_train, criterion_test=margin_test,
-                            checkpoint_suffix=checkpoint_suffix, device=device, optimizer=sim_optimizer, adv_train=adv_train)
+                            checkpoint_suffix=checkpoint_suffix, device=device, optimizer=sim_optimizer, adv_train=adv_train, resume=resume)
 
     params['created_on'] = str(datetime.now())
     params_out_path = osp.join(out_path, f'params_train{checkpoint_suffix}.json')

@@ -27,14 +27,3 @@ class RandomAdversary(object):
 
         seedset = [torch.cat(images), torch.cat(labels)]
         return seedset
-
-
-class JDAAdversary(object):
-    def __init__(self, adversary_model, blackbox, blinders_fn, MEAN, STD, device, eps=0.1, steps=1, momentum=0):
-        self.adversary_model = adversary_model
-        self.blackbox = blackbox
-        self.device = device
-        self.JDA = MultiStepJDA(self.adversary_model, self.blackbox, MEAN, STD, device=self.device, eps=eps, steps=steps, momentum=momentum)
-
-    def augment(self, dataloader, outdir):
-        return self.JDA(dataloader, outdir)

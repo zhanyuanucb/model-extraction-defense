@@ -22,8 +22,8 @@
 #                  --seedset_dir=/mydata/model-extraction/data/imagenet32_subset50000 \
 #                  --batch_size=128
 
-python getseed.py /mydata/model-extraction/model-extraction-defense/attack/victim/models/cifar10/wrn28 \
+CUDA_VISIBLE_DEVICES=1 python getseed.py /mydata/model-extraction/model-extraction-defense/attack/victim/models/cifar10/wrn28_2 \
                   --out_dir /mydata/model-extraction/model-extraction-defense/attack/adversary/models/cifar10 \
                   --seedset_name=CINIC10 \
-                  --seedset_dir=/mydata/model-extraction/data/cinic10_balanced_subset65000 \
+                  --seedset_dir=/mydata/model-extraction/data/cifar10_balanced_subset5000 \
                   --batch_size=128

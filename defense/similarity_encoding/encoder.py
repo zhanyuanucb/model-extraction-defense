@@ -74,9 +74,9 @@ def train_step(model, train_loader, margin, optimizer, epoch, device, scheduler,
         t_feat = model(t)
         d_feat = model(d)
 
-        #loss = loss_fn(t_feat, o_feat) + F.relu(margin**2 - loss_fn(d_feat, o_feat))
+        loss = loss_fn(t_feat, o_feat) + F.relu(margin**2 - loss_fn(d_feat, o_feat))
 
-        loss = lossless_triplet(o_feat, t_feat, d_feat, dist=loss_fn)
+        #loss = lossless_triplet(o_feat, t_feat, d_feat, dist=loss_fn)
 
         loss.backward()
         optimizer.step()
@@ -175,9 +175,8 @@ def train_model(model, trainset, out_path, batch_size=32, margin_train=np.sqrt(1
             print("=> loading checkpoint '{}'".format(model_path))
             checkpoint = torch.load(model_path)
             start_epoch = checkpoint['epoch']
-            best_test_acc = checkpoint['best_acc']
             model.load_state_dict(checkpoint['state_dict'])
-            optimizer.load_state_dict(checkpoint['optimizer'])
+            #optimizer.load_state_dict(checkpoint['optimizer'])
             print("=> loaded checkpoint '{}' (epoch {})".format(resume, checkpoint['epoch']))
         else:
             print("=> no checkpoint found at '{}'".format(model_path))
