@@ -37,12 +37,13 @@ def main():
     parser.add_argument("--encoder_ckp", metavar="PATH", type=str,
                         default="/mydata/model-extraction/model-extraction-defense/defense/similarity_encoding/")
     parser.add_argument("--encoder_margin", metavar="TYPE", type=float, default=3.2)
+    parser.add_argument("--encoder_suffix", metavar="TYPE", type=str, default="")
     parser.add_argument('--activation', metavar='TYPE', type=str, help='Activation name', default=None)
     parser.add_argument("--k", metavar="TYPE", type=int, default=1)
     parser.add_argument("--thresh", metavar="TYPE", type=float, help="detector threshold", default=0.0012760052197845653)
     parser.add_argument("--log_suffix", metavar="TYPE", type=str, default="benign")
     parser.add_argument("--log_dir", metavar="PATH", type=str,
-                        default="./")
+                        default="./benign_log")
     parser.add_argument("--device_id", metavar="TYPE", type=int, default=0)
     args = parser.parse_args()
     params = vars(args)
@@ -82,6 +83,8 @@ def main():
     # ----------- Setup Similarity Encoder
     blackbox_dir = params["blackbox_dir"]
     encoder_ckp = params["encoder_ckp"]
+    encoder_suffix = params["encoder_suffix"]
+    encoder_arch_name += encoder_suffix
     if encoder_ckp is not None:
         encoder_margin = params["encoder_margin"]
         encoder_ckp = osp.join(encoder_ckp, encoder_arch_name, f"CIFAR10-margin-{encoder_margin}")
@@ -97,7 +100,7 @@ def main():
         encoder.eval()
 
         blackbox = Detector(k, thresh, encoder, MEAN, STD, log_suffix=log_suffix, log_dir=log_dir)
-        print(f"threshold {blackbox.thresh}, k {k}")
+        #print(f"threshold {blackbox.thresh}, k {k}")
         blackbox.init(blackbox_dir, device, time=created_on)
     else:
         blackbox = Blackbox.from_modeldir(blackbox_dir, device)

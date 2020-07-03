@@ -81,7 +81,7 @@ class BlinderPositiveNegativeSet(VisionDataset):
             img_blinder = torch.clamp(self.encoder(img_pt[None].to(self.device)), 0., 1.)
         img_blinder = img_blinder[0]*255
         img_blinder = Image.fromarray(img_blinder.cpu().numpy().astype('int8').transpose([1, 2, 0]), mode=self.mode)
-        img_blinder = self.normal_transform(img_blinder)
+        img_blinder = self.random_transform(img_blinder)
 
         other_idx = random.choice(list(range(index)) + list(range(index+1, self.n_samples)))
         img2_pt = self.data[other_idx].clone()

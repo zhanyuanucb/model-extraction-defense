@@ -57,6 +57,7 @@ def main():
     parser.add_argument("--encoder_ckp", metavar="PATH", type=str,
                         default="/mydata/model-extraction/model-extraction-defense/defense/similarity_encoding/")
     parser.add_argument('--activation', metavar='TYPE', type=str, help='Activation name', default=None)
+    parser.add_argument("--encoder_suffix", metavar="TYPE", type=str, default="")
 #    parser.add_argument("--encoder_ckp", metavar="PATH", type=str,
 #                        default=None)
     parser.add_argument("--resume", metavar="PATH", type=str,
@@ -110,6 +111,8 @@ def main():
     # setup similarity encoder
     blackbox_dir = params["blackbox_dir"]
     encoder_ckp = params["encoder_ckp"]
+    encoder_suffix = params["encoder_suffix"]
+    encoder_arch_name += encoder_suffix
 
     if encoder_ckp is not None:
         encoder_margin = params["encoder_margin"]

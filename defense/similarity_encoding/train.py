@@ -56,9 +56,10 @@ def main():
                         help='Destination directory to store trained model', default="/mydata/model-extraction/model-extraction-defense/defense/similarity_encoding")
     parser.add_argument('--dataset_name', metavar='TYPE', type=str, help='Name of dataset', default='CIFAR10')
     parser.add_argument('--model_name', metavar='TYPE', type=str, help='Model name', default="simnet")
+    parser.add_argument('--model_suffix', metavar='TYPE', type=str, default="")
     parser.add_argument('--num_classes', metavar='TYPE', type=int, help='Number of classes', default=10)
     parser.add_argument('--batch_size', metavar='TYPE', type=int, help='Batch size of queries', default=1)
-    parser.add_argument('--train_epochs', metavar='TYPE', type=int, help='Training epochs', default=100)
+    parser.add_argument('--train_epochs', metavar='TYPE', type=int, help='Training epochs', default=200)
     parser.add_argument('--sim_epochs', metavar='TYPE', type=int, help='Training epochs', default=50)
     parser.add_argument('--sim_norm', action='store_true')
     parser.add_argument('--activation', metavar='TYPE', type=str, help='Activation name', default=None)
@@ -170,6 +171,7 @@ def main():
     sim_trainset = BlinderPositiveNegativeSet(train_dir, auto_encoder,
                                      normal_transform=test_transform,
                                      random_transform=random_transform)
+
     sim_valset = BlinderPositiveNegativeSet(test_dir, auto_encoder,
                                      normal_transform=test_transform,
                                      random_transform=random_transform)
@@ -196,7 +198,8 @@ def main():
     checkpoint_suffix = ".sim-{:.1f}".format(margin_test)
     resume = params["resume"]
 
-    out_path = osp.join(out_path, model_name)
+    model_suffix = params["model_suffix"]
+    out_path = osp.join(out_path, model_name+model_suffix)
     if not osp.exists(out_path):
         os.mkdir(out_path)
 

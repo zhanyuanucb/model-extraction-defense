@@ -26,15 +26,17 @@
 #                      --log_suffix=benign_multi_cluster_$encoder_name \
 #                      --device_id=1
                       
+encoder_arch_name="wrn28_2"                      
 CUDA_VISIBLE_DEVICES=0 python benign_user.py \
-                      --encoder_arch_name=resnet34 \
+                      --encoder_arch_name=$encoder_arch_name \
                       --encoder_margin=3.2 \
-                      --thresh=0.003130266818916425 \
-                      --activation="sigmoid" \
+                      --encoder_suffix="_victim_AE_ep10" \
+                      --thresh=0.9180578205585479 \
                       --k=1 \
-                      --log_suffix=benign_resnet34 \
+                      --log_suffix=$encoder_arch_name \
                       -l CIFAR10 CINIC10 \
                       --device_id=0
+                      
 # --thresh=0.0014249234207673                      
 #                      --thresh=0.002088276777882129 \
 #                      --thresh=0.0037130360356532033 \

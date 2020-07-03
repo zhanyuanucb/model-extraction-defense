@@ -2,6 +2,7 @@ import pickle
 import argparse
 import os
 import os.path as osp
+import numpy as np
 
 
 def main():
@@ -18,20 +19,21 @@ def main():
     dataset_name = params["dataset"]
     encoder_arch = params["encoder_arch"]
     K = params["K"]
-    with open(osp.join(f"{encoder_arch}/{dataset_name}-margin-{margin}", "k_n_thresh.pkl"), 'rb') as file:
+    root = f"{encoder_arch}/{dataset_name}-margin-{margin}"
+    with open(osp.join(root, "k_n_thresh.pkl"), 'rb') as file:
         ks, thresholds = pickle.load(file)
     assert len(thresholds) > K, f"K({K}) should < len(thresholds){len(thresholds)}"
 
     msg = [str(margin), str(K), str(dict(zip(ks, thresholds))[K])]
 
-    out_dir = "./margin_k_thresh.tsv"
+    out_dir = osp.join(root,"margin_k_thresh.tsv")
     if not osp.exists(out_dir):
         with open(out_dir, 'w') as record:
             title = ["Margin", "K", "Threshold"]
             record.write('\t'.join(title) + '\n')
 
-    with open(out_dir, 'a') as record:
-        record.write(f"{encoder_arch} " + '\n')
+#    with open(out_dir, 'a') as record:
+#        record.write(f"{encoder_arch} " + '\n')
 
     with open(out_dir, 'a') as record:
         record.write('\t'.join(msg) + '\n')
