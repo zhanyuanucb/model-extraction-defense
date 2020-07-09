@@ -9,6 +9,7 @@ def main():
     parser = argparse.ArgumentParser(description='Given K and margin, look up threshold.')
     parser.add_argument('--K', type=int)
     parser.add_argument('--encoder_arch', type=str, default="simnet")
+    parser.add_argument('--encoder_suffix', type=str, default="")
     parser.add_argument('--margin', type=str)
     parser.add_argument('--dataset', type=str, default="CIFAR10")
 
@@ -18,8 +19,9 @@ def main():
     margin = params["margin"]
     dataset_name = params["dataset"]
     encoder_arch = params["encoder_arch"]
+    encoder_suffix = params["encoder_suffix"]
     K = params["K"]
-    root = f"{encoder_arch}/{dataset_name}-margin-{margin}"
+    root = f"{encoder_arch+encoder_suffix}/{dataset_name}-margin-{margin}"
     with open(osp.join(root, "k_n_thresh.pkl"), 'rb') as file:
         ks, thresholds = pickle.load(file)
     assert len(thresholds) > K, f"K({K}) should < len(thresholds){len(thresholds)}"

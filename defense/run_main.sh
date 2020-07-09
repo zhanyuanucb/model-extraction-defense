@@ -43,37 +43,37 @@
 #                                      --blinders_dir=/mydata/model-extraction/model-extraction-defense/attack/adversary/query_blinding/autoencoder_blind/phase2_cinic10_0_
                                      
  
-
+encoder_name="wrn28_2"
+encoder_suffix="_victim_xtrained"
+thresh=1.2431119956970216
+#CUDA_VISIBLE_DEVICES=0 python main.py --model_name="wrn28_2" \
+#                                     --encoder_arch_name=$encoder_name \
+#                                     --encoder_suffix=$encoder_suffix \
+#                                     --encoder_margin=3.2 \
+#                                     --thresh=$thresh \
+#                                     --log_suffix=cinic_autoencoder\
+#                                     --blinders_dir=/mydata/model-extraction/model-extraction-defense/attack/adversary/query_blinding/autoencoder_blind/phase2_cinic10_0_ \
+#                                     --device_id=0
+#                                     
 CUDA_VISIBLE_DEVICES=0 python main.py --model_name="wrn28_2" \
-                                     --encoder_arch_name="wrn28_2" \
-                                     --encoder_suffix="_victim_AE_ep10" \
-                                     --encoder_margin=3.2 \
-                                     --k=1 \
-                                     --thresh=0.9180578205585479 \
-                                     --log_suffix=cinic_auto_encoder \
-                                     --blinders_dir=/mydata/model-extraction/model-extraction-defense/attack/adversary/query_blinding/autoencoder_blind/phase2_cinic10_0_ \
-                                     --device_id=0
-                                     
-CUDA_VISIBLE_DEVICES=0 python main.py --model_name="wrn28_2" \
-                                       --encoder_arch_name="wrn28_2" \
-                                       --encoder_suffix="_victim_AE_ep10" \
+                                       --encoder_arch_name=$encoder_name \
+                                       --encoder_suffix=$encoder_suffix \
                                        --encoder_margin=3.2 \
-                                       --k=1 \
-                                       --thresh=0.9180578205585479 \
-                                       --log_suffix=standard \
-                                       --device_id=0                                                                                                                                                     
+                                       --thresh=$thresh \
+                                       --blinders_dir="get_gaussian_noise" \
+                                       --log_suffix=re_gaussian\
 
 #for blinder in get_uniform_noise get_gaussian_noise get_random_brightness get_random_rotate get_random_contrast get_random_translate get_random_scale get_random_crop
 #do
 #CUDA_VISIBLE_DEVICES=1 python main.py --model_name="wrn28_2" \
-#                                      --encoder_arch_name=resnet34 \
+#                                      --encoder_arch_name=$encoder_name \
+#                                      --encoder_suffix=$encoder_suffix \
 #                                      --encoder_margin=3.2 \
 #                                      --k=1 \
-#                                      --thresh=0.003130266818916425 \
-#                                      --activation="sigmoid" \
+#                                      --thresh=$thresh \
 #                                      --blinders_dir=$blinder \
 #                                      --log_suffix={$blinder}_low \
-#                                      --r=low \
+#                                      --r="low" \
 #                                      --device_id=1
 #done                                      
 

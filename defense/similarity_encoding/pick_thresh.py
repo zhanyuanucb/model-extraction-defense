@@ -117,6 +117,7 @@ def main():
                         help='Destination directory to store trained model', default="/mydata/model-extraction/model-extraction-defense/defense/similarity_encoding")
     parser.add_argument('--dataset_name', metavar='TYPE', type=str, help='Name of adversary\'s dataset (P_A(X))', default='MNIST')
     parser.add_argument('--model_name', metavar='TYPE', type=str, help='Model name', default="simnet")
+    parser.add_argument('--model_suffix', metavar='TYPE', type=str, help='Model name', default="")
     parser.add_argument('--activation', metavar='TYPE', type=str, help='Activation name', default=None)
     parser.add_argument("--margins", nargs='+', type=float, required=True)
     parser.add_argument('--num_classes', metavar='TYPE', type=int, help='Number of classes', default=10)
@@ -166,6 +167,7 @@ def main():
             encoder_name = f"{dataset_name}-margin-{margin}"
             # ----------- Load Encoder
             model_name = params['model_name']
+            model_suffix = params['model_suffix']
             num_classes = params['num_classes']
             activation_name = params['activation']
             if activation_name == "sigmoid":
@@ -175,17 +177,19 @@ def main():
                 print("Normal activation")
                 activation = None
             model = zoo.get_net(model_name, modelfamily, num_classes=num_classes)
-            model.fc = IdLayer(activation=activation)
+            #model.fc = IdLayer(activation=activation)
             ckp = params['ckp_dir']
+            model_name += model_suffix
             ckp = osp.join(ckp, model_name, encoder_name, f"checkpoint.sim-{margin}.pth.tar")
             if osp.isfile(ckp):
                 print("=> loading checkpoint '{}'".format(ckp))
                 checkpoint = torch.load(ckp)
-                best_pacc = checkpoint['best_pacc']
-                best_nacc = checkpoint['best_nacc']
+                #best_pacc = checkpoint['best_pacc']
+                #best_nacc = checkpoint['best_nacc']
                 model.load_state_dict(checkpoint['state_dict'])
+                model.fc = IdLayer(activation=activation)
                 model.eval()
-                print("=> loaded checkpoint:\n best_pacc: {} \n best_nacc: {}".format(best_pacc, best_nacc))
+                #print("=> loaded checkpoint:\n best_pacc: {} \n best_nacc: {}".format(best_pacc, best_nacc))
             else:
                 print("=> no checkpoint found at '{}'".format(ckp))
                 exit(1)
@@ -201,9 +205,9 @@ def main():
             plt.xlabel('k (# of nearest neighbors)')
             plt.ylabel('Threshold (encodered space)')
             plt.title(f'Threshold vs k ({encoder_name})')
-            plt.savefig(osp.join(out_dir, f'k_thresh_plot_{encoder_name}.png'), bbox_inches='tight')
+            plt.savefig(osp.join(out_dir, 'k_thresh_plot.png'), bbox_inches='tight')
             plt.clf()
-            print(f"Save plot to {osp.join(out_dir, f'k_thresh_plot_{encoder_name}.png')}")
+            print(f"Save plot to {osp.join(out_dir, 'k_thresh_plot.png')}")
 
             with open(osp.join(out_dir, 'k_n_thresh.pkl'), 'wb') as file:
                 print(f"Results saved to {osp.join(out_dir, 'k_n_thresh.pkl')}")

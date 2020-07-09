@@ -41,6 +41,7 @@ def main():
     parser.add_argument("--alt_t", metavar="TYPE", type=int, help="alternate period of step size sign", default=None)
     parser.add_argument("--epochs", metavar="TYPE", type=int, help="extraction training epochs", default=10)
     parser.add_argument("--momentum", metavar="TYPE", type=float, help="multi-step JDA momentum", default=0.7)
+    parser.add_argument("--t_rand", action="store_true")
     parser.add_argument("--blackbox_dir", metavar="PATH", type=str,
                         default="/mydata/model-extraction/model-extraction-defense/attack/victim/models/cifar10/wrn28_2")
     parser.add_argument("--blinders_dir", metavar="PATH", type=str,
@@ -63,7 +64,7 @@ def main():
     parser.add_argument("--resume", metavar="PATH", type=str,
                         default=None)
     parser.add_argument("--encoder_margin", metavar="TYPE", type=float, default=3.2)
-    parser.add_argument("--k", metavar="TYPE", type=int, default=5)
+    parser.add_argument("--k", metavar="TYPE", type=int, default=1)
     parser.add_argument("--thresh", metavar="TYPE", type=float, help="detector threshold", default=0.16197727304697038)
     parser.add_argument("--log_suffix", metavar="TYPE", type=str, default="testing")
     parser.add_argument("--params_search", action="store_true")
@@ -105,7 +106,7 @@ def main():
         print("Normal activation")
         activation = None
 
-    encoder.fc = IdLayer(activation=activation).to(device)
+    #encoder.fc = IdLayer(activation=activation).to(device)
     MEAN, STD = cfg.NORMAL_PARAMS[modelfamily]
 
     # setup similarity encoder
@@ -123,7 +124,7 @@ def main():
         start_epoch = checkpoint['epoch']
         encoder.load_state_dict(checkpoint['state_dict'])
         print("===> loaded checkpoint (epoch {})".format(checkpoint['epoch']))
-
+        encoder.fc = IdLayer(activation=activation)
         encoder = encoder.to(device)
         encoder.eval()
         print(f"==> Loaded encoder: arch_name: {encoder_arch_name} \n margin: {encoder_margin} \n thresh: {thresh}")
@@ -146,6 +147,8 @@ def main():
     steps= params["steps"]
     momentum= params["momentum"]
     delta_step = params["delta_step"]
+    t_rand = params["t_rand"]
+    print(f"Detector config:\n eps: {eps} \n steps: {steps} \n momentum: {momentum} \n t_rand: {t_rand} \n delta_step: {delta_step}")
 
     # set up query blinding
     blinders_dir = params["blinders_dir"]
@@ -171,7 +174,7 @@ def main():
     else:
         auto_encoder = None
 
-    adversary = MultiStepJDA(model, blackbox, MEAN, STD, device, blinders_fn=auto_encoder, 
+    adversary = MultiStepJDA(model, blackbox, MEAN, STD, device, blinders_fn=auto_encoder, t_rand=t_rand, 
                              eps=eps, steps=steps, momentum=momentum, delta_step=delta_step) 
 
     # ----------- Set up seedset

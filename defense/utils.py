@@ -19,7 +19,7 @@ class ImageTensorSet(Dataset):
         img, target = self.data[index], self.targets[index]
         if self.transform is not None:
             img *= 255
-            img = Image.fromarray(img.numpy().astype('int8').transpose([1, 2, 0]), mode=self.mode)
+            img = Image.fromarray(img.numpy().astype('uint8').transpose([1, 2, 0]), mode=self.mode)
             img = self.transform(img)
 
         return img, target
@@ -42,14 +42,14 @@ class PositiveNegativeSet(VisionDataset):
         img_pt, y = self.data[index], self.targets[index]
 
         img_pt *= 255
-        img = Image.fromarray(img_pt.numpy().astype('int8').transpose([1, 2, 0]), mode=self.mode)
+        img = Image.fromarray(img_pt.numpy().astype('uint8').transpose([1, 2, 0]), mode=self.mode)
         ori_img = self.normal_transform(img)
         ran_img = self.random_transform(img)
 
         other_idx = random.choice(list(range(index)) + list(range(index+1, self.n_samples)))
         img2_pt = self.data[other_idx].clone()
         img2_pt *= 255
-        img2 = Image.fromarray(img2_pt.numpy().astype('int8').transpose([1, 2, 0]), mode=self.mode)
+        img2 = Image.fromarray(img2_pt.numpy().astype('uint8').transpose([1, 2, 0]), mode=self.mode)
         other_img = self.normal_transform(img2)
 
         return ori_img, ran_img, other_img, y
@@ -74,19 +74,19 @@ class BlinderPositiveNegativeSet(VisionDataset):
         img_pt, y = self.data[index], self.targets[index]
 
         img = img_pt*255
-        img = Image.fromarray(img.numpy().astype('int8').transpose([1, 2, 0]), mode=self.mode)
+        img = Image.fromarray(img.numpy().astype('uint8').transpose([1, 2, 0]), mode=self.mode)
         ori_img = self.normal_transform(img)
 
         with torch.no_grad():
             img_blinder = torch.clamp(self.encoder(img_pt[None].to(self.device)), 0., 1.)
         img_blinder = img_blinder[0]*255
-        img_blinder = Image.fromarray(img_blinder.cpu().numpy().astype('int8').transpose([1, 2, 0]), mode=self.mode)
+        img_blinder = Image.fromarray(img_blinder.cpu().numpy().astype('uint8').transpose([1, 2, 0]), mode=self.mode)
         img_blinder = self.random_transform(img_blinder)
 
         other_idx = random.choice(list(range(index)) + list(range(index+1, self.n_samples)))
         img2_pt = self.data[other_idx].clone()
         img2_pt *= 255
-        img2 = Image.fromarray(img2_pt.numpy().astype('int8').transpose([1, 2, 0]), mode=self.mode)
+        img2 = Image.fromarray(img2_pt.numpy().astype('uint8').transpose([1, 2, 0]), mode=self.mode)
         other_img = self.normal_transform(img2)
 
         return ori_img, img_blinder, other_img, y

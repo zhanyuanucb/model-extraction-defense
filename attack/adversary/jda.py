@@ -1,3 +1,4 @@
+import random
 import torch
 from torch.autograd import Variable
 import torch.nn as nn
@@ -10,7 +11,7 @@ import pickle
 
 class MultiStepJDA:
     def __init__(self, adversary_model, blackbox, mean, std, device, 
-                 criterion=model_utils.soft_cross_entropy,
+                 criterion=model_utils.soft_cross_entropy, t_rand=False,
                  blinders_fn=None, eps=0.1, steps=1, momentum=0, delta_step=0):
         self.adversary_model = adversary_model
         self.blackbox = blackbox
@@ -19,6 +20,7 @@ class MultiStepJDA:
         self.lam = eps/steps
         self.steps = steps
         self.delta_step = delta_step
+        self.t_rand = t_rand
         self.momentum = momentum
         self.v = None 
         self.MEAN = torch.Tensor(mean).reshape([1, 3, 1, 1]).to(device)
@@ -54,6 +56,8 @@ class MultiStepJDA:
     def augment_step(self, images, labels):
         #images, labels = images.to(device), labels.to(device)
         jacobian = self.get_jacobian(images, labels)
+        if self.t_rand:
+            jacobian *= -1
         self.v = self.momentum * self.v + self.lam*torch.sign(jacobian)#.to(device)
         # Clip to valid pixel values
         images = images + self.v
@@ -66,11 +70,23 @@ class MultiStepJDA:
         """ Multi-step augmentation
         """
         print("Start jocobian data augmentaion...")
-        print(f"JDA steps: {self.steps}")
         images_aug, labels_aug = [], []
         conf_list = []
         for images, labels in dataloader:
             images, labels = images.to(self.device), labels.to(self.device)
+            if self.t_rand:
+                #TODO: implement T-RAND
+                targeted_labels = torch.zeros_like(labels)
+                batch_size, num_class = labels.size(0), labels.size(1)
+                _, cur_labels = torch.topk(labels, 1)
+                indices = [[] for _ in range(batch_size)]
+                for i in range(batch_size):
+                    indices[i].append(random.choice([j for j in range(num_class) if j != cur_labels[i]])) 
+
+                indices = torch.Tensor(indices).to(torch.long)
+                targeted_labels.scatter(1, indices.to(self.device), torch.ones_like(labels))
+
+                labels = targeted_labels.to(self.device)
             self.reset_v(input_shape=images.shape)
             if self.blinders_fn is not None:
                 images = images * self.STD + self.MEAN

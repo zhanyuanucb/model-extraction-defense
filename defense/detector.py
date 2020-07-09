@@ -93,8 +93,8 @@ class Detector:
         is_attack = k_avg_dist < self.thresh
         if is_attack:
             self.detection_count += 1
-            self._write_log(k_avg_dist)
             if self.detection_count % self.num_clusters == 0:
+                self._write_log(k_avg_dist)
                 self.alarm_count += 1
                 self.clear_memory()
         return is_attack
@@ -114,11 +114,10 @@ class Detector:
 
     def _write_log(self, detected_dist):
         with open(self.log_file, 'a') as log:
-            if self.detection_count % self.num_clusters == 0:
-                columns = [str(self.query_count), str(self.detection_count // self.num_clusters), str(detected_dist)]
-            #else:
-            #    columns = [str(self.query_count), str(self.detection_count), str(detected_dist)]
-                log.write('\t'.join(columns) + '\n')
+            columns = [str(self.query_count), str(self.detection_count // self.num_clusters), str(detected_dist)]
+        #else:
+        #    columns = [str(self.query_count), str(self.detection_count), str(detected_dist)]
+            log.write('\t'.join(columns) + '\n')
     
     def __call__(self, images):
         images = images.to(self.device)
