@@ -147,34 +147,34 @@ def main():
     test_dir = cfg.dataset2dir[dataset_name]["test"]
 
     # ----------------- Similarity training
-    #sim_trainset = PositiveNegativeSet(train_dir, normal_transform=test_transform, random_transform=random_transform, dataset=dataset_name)
-    #sim_valset = PositiveNegativeSet(test_dir, normal_transform=test_transform, random_transform=random_transform, dataset=dataset_name)
+    sim_trainset = PositiveNegativeSet(train_dir, normal_transform=test_transform, random_transform=random_transform, dataset=dataset_name)
+    sim_valset = PositiveNegativeSet(test_dir, normal_transform=test_transform, random_transform=random_transform, dataset=dataset_name)
 
-    blinders_dir = params["blinders_dir"]
-    if blinders_dir is not None:
-        blinders_ckp = osp.join(blinders_dir, "checkpoint.blind.pth.tar")
-        if osp.isfile(blinders_ckp):
-            blinders_noise_fn = blinders_transforms.get_gaussian_noise(device=device, r=0.095)
-            auto_encoder = AutoencoderBlinders(blinders_noise_fn)
-            print("=> Loading auto-encoder checkpoint '{}'".format(blinders_ckp))
-            checkpoint = torch.load(blinders_ckp, map_location=device)
-            start_epoch = checkpoint['epoch']
-            best_test_loss = checkpoint['best_loss']
-            auto_encoder.load_state_dict(checkpoint['state_dict'])
-            print("===> loaded checkpoint (epoch {})".format(checkpoint['epoch']))
-            print(f"===> Best val loss: {best_test_loss}")
-            #auto_encoder = auto_encoder.to(device)
-            auto_encoder.eval()
-        else:
-            print(f"Can't find auto-encoder ckp at {blinders_ckp}")
-            exit(1)
-    sim_trainset = BlinderPositiveNegativeSet(train_dir, auto_encoder,
-                                     normal_transform=test_transform,
-                                     random_transform=random_transform)
+    #blinders_dir = params["blinders_dir"]
+    #if blinders_dir is not None:
+    #    blinders_ckp = osp.join(blinders_dir, "checkpoint.blind.pth.tar")
+    #    if osp.isfile(blinders_ckp):
+    #        blinders_noise_fn = blinders_transforms.get_gaussian_noise(device=device, r=0.095)
+    #        auto_encoder = AutoencoderBlinders(blinders_noise_fn)
+    #        print("=> Loading auto-encoder checkpoint '{}'".format(blinders_ckp))
+    #        checkpoint = torch.load(blinders_ckp, map_location=device)
+    #        start_epoch = checkpoint['epoch']
+    #        best_test_loss = checkpoint['best_loss']
+    #        auto_encoder.load_state_dict(checkpoint['state_dict'])
+    #        print("===> loaded checkpoint (epoch {})".format(checkpoint['epoch']))
+    #        print(f"===> Best val loss: {best_test_loss}")
+    #        #auto_encoder = auto_encoder.to(device)
+    #        auto_encoder.eval()
+    #    else:
+    #        print(f"Can't find auto-encoder ckp at {blinders_ckp}")
+    #        exit(1)
+    #sim_trainset = BlinderPositiveNegativeSet(train_dir, auto_encoder,
+    #                                 normal_transform=test_transform,
+    #                                 random_transform=random_transform)
 
-    sim_valset = BlinderPositiveNegativeSet(test_dir, auto_encoder,
-                                     normal_transform=test_transform,
-                                     random_transform=random_transform)
+    #sim_valset = BlinderPositiveNegativeSet(test_dir, auto_encoder,
+    #                                 normal_transform=test_transform,
+    #                                 random_transform=random_transform)
 
     # Replace the last layer
     #model.fc = IdLayer(activation=nn.Sigmoid()).to(device)

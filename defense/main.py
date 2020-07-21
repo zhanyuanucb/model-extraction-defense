@@ -97,7 +97,6 @@ def main():
     modelfamily = datasets.dataset_to_modelfamily[testset_name]
     num_classes = 10
     encoder = zoo.get_net(encoder_arch_name, modelfamily, num_classes=num_classes)
-    #encoder.fc = IdLayer(activation=nn.Sigmoid()).to(device)
     activation_name = params['activation']
     if activation_name == "sigmoid":
         activation = nn.Sigmoid()
@@ -106,7 +105,7 @@ def main():
         print("Normal activation")
         activation = None
 
-    #encoder.fc = IdLayer(activation=activation).to(device)
+    encoder.fc = IdLayer(activation=activation).to(device)
     MEAN, STD = cfg.NORMAL_PARAMS[modelfamily]
 
     # setup similarity encoder
@@ -124,7 +123,7 @@ def main():
         start_epoch = checkpoint['epoch']
         encoder.load_state_dict(checkpoint['state_dict'])
         print("===> loaded checkpoint (epoch {})".format(checkpoint['epoch']))
-        encoder.fc = IdLayer(activation=activation)
+        #encoder.fc = IdLayer(activation=activation)
         encoder = encoder.to(device)
         encoder.eval()
         print(f"==> Loaded encoder: arch_name: {encoder_arch_name} \n margin: {encoder_margin} \n thresh: {thresh}")

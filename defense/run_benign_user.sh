@@ -26,18 +26,17 @@
 #                      --log_suffix=benign_multi_cluster_$encoder_name \
 #                      --device_id=1
                       
-encoder_arch_name="resnet34"                      
-encoder_suffix="_victim_xtrained"
-for thresh in 0.395 0.3955
+encoder_arch_name="wrn28_2"                      
+encoder_suffix="_xAE_ep30"
+for thresh in 0.052 0.054
 do
 CUDA_VISIBLE_DEVICES=0 python benign_user.py \
                       --encoder_arch_name=$encoder_arch_name \
                       --encoder_margin=3.2 \
-                      --activation="sigmoid" \
                       --encoder_suffix=$encoder_suffix \
                       --thresh=$thresh \
                       --k=1 \
-                      --log_suffix=reproduce_bug_$encoder_arch_name \
+                      --log_suffix=$encoder_arch_name \
                       -l CIFAR10 CINIC10 \
                       --device_id=0
 done                      

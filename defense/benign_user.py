@@ -76,7 +76,7 @@ def main():
     else:
         print("Normal activation")
         activation = None
-    #encoder.fc = IdLayer(activation=activation)
+    encoder.fc = IdLayer(activation=activation)
     MEAN, STD = cfg.NORMAL_PARAMS["cifar"]
 
     # ----------- Setup Similarity Encoder
@@ -95,7 +95,7 @@ def main():
         print("===> loaded checkpoint (epoch {})".format(checkpoint['epoch']))
         print(f"==> Loaded encoder:\n arch_name: {encoder_arch_name} \n margin: {encoder_margin} \n thresh: {thresh}")
 
-        encoder.fc = IdLayer(activation=activation)
+        #encoder.fc = IdLayer(activation=activation)
         encoder = encoder.to(device)
         encoder.eval()
 

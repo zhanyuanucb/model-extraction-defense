@@ -177,7 +177,7 @@ def main():
                 print("Normal activation")
                 activation = None
             model = zoo.get_net(model_name, modelfamily, num_classes=num_classes)
-            #model.fc = IdLayer(activation=activation)
+            model.fc = IdLayer(activation=activation)
             ckp = params['ckp_dir']
             model_name += model_suffix
             ckp = osp.join(ckp, model_name, encoder_name, f"checkpoint.sim-{margin}.pth.tar")
@@ -187,7 +187,7 @@ def main():
                 #best_pacc = checkpoint['best_pacc']
                 #best_nacc = checkpoint['best_nacc']
                 model.load_state_dict(checkpoint['state_dict'])
-                model.fc = IdLayer(activation=activation)
+                #model.fc = IdLayer(activation=activation)
                 model.eval()
                 #print("=> loaded checkpoint:\n best_pacc: {} \n best_nacc: {}".format(best_pacc, best_nacc))
             else:

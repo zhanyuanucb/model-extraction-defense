@@ -44,25 +44,24 @@
                                      
  
 encoder_name="wrn28_2"
-encoder_suffix="_victim_xtrained"
-thresh=1.2431119956970216
-#CUDA_VISIBLE_DEVICES=0 python main.py --model_name="wrn28_2" \
-#                                     --encoder_arch_name=$encoder_name \
-#                                     --encoder_suffix=$encoder_suffix \
-#                                     --encoder_margin=3.2 \
-#                                     --thresh=$thresh \
-#                                     --log_suffix=cinic_autoencoder\
-#                                     --blinders_dir=/mydata/model-extraction/model-extraction-defense/attack/adversary/query_blinding/autoencoder_blind/phase2_cinic10_0_ \
-#                                     --device_id=0
-#                                     
+encoder_suffix="_xAE_ep30"
+thresh=0.054
+CUDA_VISIBLE_DEVICES=0 python main.py --model_name="wrn28_2" \
+                                     --encoder_arch_name=$encoder_name \
+                                     --encoder_suffix=$encoder_suffix \
+                                     --encoder_margin=3.2 \
+                                     --thresh=$thresh \
+                                     --log_suffix=cinic_autoencoder\
+                                     --blinders_dir=/mydata/model-extraction/model-extraction-defense/attack/adversary/query_blinding/autoencoder_blind/phase2_cinic10_0_ \
+                                     --device_id=0
+                                     
 CUDA_VISIBLE_DEVICES=0 python main.py --model_name="wrn28_2" \
                                        --encoder_arch_name=$encoder_name \
                                        --encoder_suffix=$encoder_suffix \
                                        --encoder_margin=3.2 \
                                        --thresh=$thresh \
-                                       --blinders_dir="get_gaussian_noise" \
-                                       --log_suffix=re_gaussian\
-
+                                       --log_suffix=\
+#
 #for blinder in get_uniform_noise get_gaussian_noise get_random_brightness get_random_rotate get_random_contrast get_random_translate get_random_scale get_random_crop
 #do
 #CUDA_VISIBLE_DEVICES=1 python main.py --model_name="wrn28_2" \
