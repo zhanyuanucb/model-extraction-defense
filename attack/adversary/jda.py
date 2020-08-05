@@ -88,14 +88,24 @@ class MultiStepJDA:
 
                 labels = targeted_labels.to(self.device)
             self.reset_v(input_shape=images.shape)
-            if self.blinders_fn is not None:
-                images = images * self.STD + self.MEAN
-                images = torch.clamp(images, 0., 1.)
-                images = self.blinders_fn(images)
-                images = (images - self.MEAN) / self.STD
+
+#            if self.blinders_fn is not None:
+#                images = images * self.STD + self.MEAN
+#                images = torch.clamp(images, 0., 1.)
+#                images = self.blinders_fn(images)
+#                images = (images - self.MEAN) / self.STD
+
             for i in range(self.steps):
                 images = Variable(images, requires_grad=True)
                 images = self.augment_step(images, labels)
+
+            if self.blinders_fn is not None:
+                with torch.no_grad():
+                    images = images * self.STD + self.MEAN
+                    images = torch.clamp(images, 0., 1.)
+                    images = self.blinders_fn(images)
+                    images = (images - self.MEAN) / self.STD
+
             images = images.cpu()
             images_aug.append(images)
             is_adv, y = self.blackbox(images)  # Inspection

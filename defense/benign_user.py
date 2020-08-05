@@ -16,6 +16,7 @@ from attack.utils.utils import create_dir
 from attack import datasets
 import modelzoo.zoo as zoo
 from detector import *
+from detector_lpips import *
 from attack.adversary.jda import MultiStepJDA
 from attack.adversary.query_blinding.blinders import AutoencoderBlinders
 import attack.adversary.query_blinding.transforms as blinders_transforms
@@ -33,6 +34,7 @@ def main():
     parser.add_argument("--blackbox_dir", metavar="PATH", type=str,
                         default="/mydata/model-extraction/model-extraction-defense/attack/victim/models/cifar10/wrn28_2")
     parser.add_argument("-l", "--testset_names", nargs='+', type=str, required=True)
+    parser.add_argument("--lpips", action="store_true")
     parser.add_argument("--encoder_arch_name", metavar="TYPE", type=str, default="simnet")
     parser.add_argument("--encoder_ckp", metavar="PATH", type=str,
                         default="/mydata/model-extraction/model-extraction-defense/defense/similarity_encoding/")
@@ -62,6 +64,7 @@ def main():
     thresh = params["thresh"]
     log_suffix = params["log_suffix"]
     log_dir = params["log_dir"]
+    use_lpips = params["lpips"]
     created_on = str(datetime.now()).replace(' ', '_')[:19]
     log_dir = osp.join(log_dir, created_on)
     create_dir(log_dir)
@@ -84,27 +87,44 @@ def main():
     encoder_ckp = params["encoder_ckp"]
     encoder_suffix = params["encoder_suffix"]
     encoder_arch_name += encoder_suffix
-    if encoder_ckp is not None:
+    # setup similarity encoder
+    if use_lpips:
+        blackbox = LpipsDetector(k, thresh, log_suffix=log_suffix, log_dir=log_dir)
+        blackbox.init(blackbox_dir, device, time=created_on)
+    elif encoder_ckp:
+        encoder_arch_name = params["encoder_arch_name"]
+        encoder = zoo.get_net(encoder_arch_name, modelfamily, num_classes=num_classes)
+        activation_name = params['activation']
+        if activation_name == "sigmoid":
+            activation = nn.Sigmoid()
+            print(f"Encoder activation: {activation_name}")
+        else:
+            print("Normal activation")
+            activation = None
+
+        encoder.fc = IdLayer(activation=activation).to(device)
+
+        encoder_ckp = params["encoder_ckp"]
+        encoder_suffix = params["encoder_suffix"]
+        encoder_arch_name += encoder_suffix
+
         encoder_margin = params["encoder_margin"]
-        encoder_ckp = osp.join(encoder_ckp, encoder_arch_name, f"CIFAR10-margin-{encoder_margin}")
+        encoder_ckp = osp.join(encoder_ckp, encoder_arch_name, f"{testset_name}-margin-{encoder_margin}")
         ckp = osp.join(encoder_ckp, f"checkpoint.sim-{encoder_margin}.pth.tar")
         print(f"=> Loading similarity encoder checkpoint '{ckp}'")
         checkpoint = torch.load(ckp)
         start_epoch = checkpoint['epoch']
         encoder.load_state_dict(checkpoint['state_dict'])
         print("===> loaded checkpoint (epoch {})".format(checkpoint['epoch']))
-        print(f"==> Loaded encoder:\n arch_name: {encoder_arch_name} \n margin: {encoder_margin} \n thresh: {thresh}")
-
         #encoder.fc = IdLayer(activation=activation)
         encoder = encoder.to(device)
         encoder.eval()
+        print(f"==> Loaded encoder: arch_name: {encoder_arch_name} \n margin: {encoder_margin} \n thresh: {thresh}")
 
         blackbox = Detector(k, thresh, encoder, MEAN, STD, log_suffix=log_suffix, log_dir=log_dir)
-        #print(f"threshold {blackbox.thresh}, k {k}")
         blackbox.init(blackbox_dir, device, time=created_on)
     else:
         blackbox = Blackbox.from_modeldir(blackbox_dir, device)
-
     # ----------- Set up query set
     test_transform = datasets.modelfamily_to_transforms["cifar"]['test']
     batch_size = params["batch_size"]

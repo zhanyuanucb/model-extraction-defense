@@ -15,6 +15,7 @@ import attack.utils.model as model_utils
 from attack import datasets
 import modelzoo.zoo as zoo
 from detector import *
+from detector_lpips import *
 from attack.adversary.jda import MultiStepJDA
 from attack.adversary.query_blinding.blinders import AutoencoderBlinders
 import attack.adversary.query_blinding.transforms as blinders_transforms
@@ -54,6 +55,7 @@ def main():
     
     parser.add_argument("--optimizer_name", metavar="TYPE", type=str, default="adam")
     parser.add_argument("--lr", metavar="TYPE", type=float, default=0.01)
+    parser.add_argument("--lpips", action="store_true")
     parser.add_argument("--encoder_arch_name", metavar="TYPE", type=str, default="simnet")
     parser.add_argument("--encoder_ckp", metavar="PATH", type=str,
                         default="/mydata/model-extraction/model-extraction-defense/defense/similarity_encoding/")
@@ -93,30 +95,36 @@ def main():
     log_suffix = params["log_suffix"]
     log_dir = ckp_out_root
     testset_name = params["testset_name"]
-    encoder_arch_name = params["encoder_arch_name"]
     modelfamily = datasets.dataset_to_modelfamily[testset_name]
-    num_classes = 10
-    encoder = zoo.get_net(encoder_arch_name, modelfamily, num_classes=num_classes)
-    activation_name = params['activation']
-    if activation_name == "sigmoid":
-        activation = nn.Sigmoid()
-        print(f"Encoder activation: {activation_name}")
-    else:
-        print("Normal activation")
-        activation = None
-
-    encoder.fc = IdLayer(activation=activation).to(device)
     MEAN, STD = cfg.NORMAL_PARAMS[modelfamily]
 
-    # setup similarity encoder
+    use_lpips = params["lpips"]
     blackbox_dir = params["blackbox_dir"]
     encoder_ckp = params["encoder_ckp"]
-    encoder_suffix = params["encoder_suffix"]
-    encoder_arch_name += encoder_suffix
+    encoder_margin = params["encoder_margin"]
+    num_classes = 10
 
-    if encoder_ckp is not None:
-        encoder_margin = params["encoder_margin"]
+    # setup similarity encoder
+    if use_lpips:
+        blackbox = LpipsDetector(k, thresh, log_suffix=log_suffix, log_dir=log_dir)
+        blackbox.init(blackbox_dir, device, time=created_on)
+    elif encoder_ckp:
+        encoder_arch_name = params["encoder_arch_name"]
         encoder_ckp = osp.join(encoder_ckp, encoder_arch_name, f"{testset_name}-margin-{encoder_margin}")
+        encoder = zoo.get_net(encoder_arch_name, modelfamily, num_classes=num_classes)
+        activation_name = params['activation']
+        if activation_name == "sigmoid":
+            activation = nn.Sigmoid()
+            print(f"Encoder activation: {activation_name}")
+        else:
+            print("Normal activation")
+            activation = None
+
+        encoder.fc = IdLayer(activation=activation).to(device)
+
+        encoder_suffix = params["encoder_suffix"]
+        encoder_arch_name += encoder_suffix
+
         ckp = osp.join(encoder_ckp, f"checkpoint.sim-{encoder_margin}.pth.tar")
         print(f"=> Loading similarity encoder checkpoint '{ckp}'")
         checkpoint = torch.load(ckp)
@@ -183,6 +191,7 @@ def main():
     seedset_dir = params["seedset_dir"]
     seedset_folder = tvdatasets.ImageFolder(seedset_dir, transform=test_transform)
     seedset_loader = DataLoader(seedset_folder, batch_size=128, shuffle=True, num_workers=10)
+    #seedset_loader = DataLoader(seedset_folder, batch_size=128, shuffle=False, num_workers=10)
     seedset_samples = adversary.get_seedset(dataloader=seedset_loader)
 
     seedset_outpath = osp.join(ckp_out_root, 'seed.pt')
@@ -225,6 +234,7 @@ def main():
     best_test_acc = -1
     num_workers = 10
     aug_loader = DataLoader(substitute_set, batch_size=batch_size, shuffle=True, num_workers=num_workers)
+    #aug_loader = DataLoader(substitute_set, batch_size=batch_size, shuffle=False, num_workers=num_workers)
     substitute_out_path = osp.join(ckp_out_root, f"substitute_set.pt")
     for p in range(1, phi+1):
         if alt_t: # Apply periodic step size
@@ -238,6 +248,7 @@ def main():
 
             nxt_aug_samples = [images_aug, labels_aug]
             nxt_aug_set = ImageTensorSet(nxt_aug_samples)
+            #aug_loader = DataLoader(nxt_aug_set, batch_size=batch_size, shuffle=False, num_workers=num_workers)
             aug_loader = DataLoader(nxt_aug_set, batch_size=batch_size, shuffle=True, num_workers=num_workers)
 
             images_sub = torch.cat([images_sub, images_aug])

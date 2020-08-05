@@ -131,6 +131,7 @@ def main():
     if not load_pretrained:
         model_utils.train_model(model, trainset, out_path, epochs=train_epochs, testset=valset,
                                 checkpoint_suffix=checkpoint_suffix, callback=callback, device=device, optimizer=optimizer)
+        #print("Train encoder w/ random feature extractor")
     # ---------------- Or load a pretrained feature extractor
     else:
         print("=> loading checkpoint '{}'".format(ckp))
@@ -177,6 +178,7 @@ def main():
     #                                 random_transform=random_transform)
 
     # Replace the last layer
+
     #model.fc = IdLayer(activation=nn.Sigmoid()).to(device)
     activation_name = params['activation']
     if activation_name == "sigmoid":

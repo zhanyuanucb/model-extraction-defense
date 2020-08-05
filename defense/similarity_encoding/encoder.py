@@ -63,7 +63,6 @@ def train_step(model, train_loader, margin, optimizer, epoch, device, scheduler,
     p_correct = 0
     n_correct = 0
     total = 0
-    train_loss_batch = 0
     epoch_size = len(train_loader.dataset)
 
     t_start = time.time()
@@ -96,21 +95,20 @@ def train_step(model, train_loader, margin, optimizer, epoch, device, scheduler,
         exact_epoch = epoch + prog - 1
         p_acc = 100. * p_correct / total
         n_acc = 100. * n_correct / total
-        #train_loss_batch = train_loss / total
 
         if (batch_idx + 1) % log_interval == 0:
             print('[Train] Epoch: {:.2f} [{}/{} ({:.0f}%)]\tLoss: {:.6f}\tPositive Accuracy: {:.1f} ({}/{}) \tNegative Accuracy: {:.1f} ({}/{})'.format(
                 exact_epoch, batch_idx * len(d), len(train_loader.dataset), 100. * batch_idx / len(train_loader),
                 loss.item(), p_acc, p_correct, total, n_acc, n_correct, total))
 
-    train_loss_batch = train_loss / (batch_idx+1)
+    train_loss /= (batch_idx+1)
     t_end = time.time()
     t_epoch = int(t_end - t_start)
 
-    return train_loss_batch, p_acc, n_acc
+    return train_loss, p_acc, n_acc
 
 
-def test_step(model, test_loader, margin, device, epoch=0., loss_fn=nn.MSELoss(reduction="sum"), silent=False):
+def test_step(model, test_loader, margin, device, epoch=0., loss_fn=nn.MSELoss(), silent=False):
     model.eval()
     test_loss = 0.
     p_correct = 0
@@ -124,8 +122,10 @@ def test_step(model, test_loader, margin, device, epoch=0., loss_fn=nn.MSELoss(r
             o_feat = model(o)
             t_feat = model(t)
             d_feat = model(d)
+
             p_dist = torch.norm(o_feat - t_feat, p=2, dim=1)
             n_dist = torch.norm(o_feat - d_feat, p=2, dim=1)
+
             loss = loss_fn(t_feat, o_feat) + F.relu(margin**2 - loss_fn(d_feat, o_feat))
             test_loss += loss.item()
             total += d.size(0)
@@ -134,7 +134,7 @@ def test_step(model, test_loader, margin, device, epoch=0., loss_fn=nn.MSELoss(r
 
     t_end = time.time()
     t_epoch = int(t_end - t_start)
-    test_loss = test_loss / total
+    test_loss = test_loss / (batch_idx+1)
 
     p_acc = 100. * p_correct / total
     n_acc = 100. * n_correct / total

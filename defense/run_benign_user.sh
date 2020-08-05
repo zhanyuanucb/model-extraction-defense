@@ -26,11 +26,12 @@
 #                      --log_suffix=benign_multi_cluster_$encoder_name \
 #                      --device_id=1
                       
-encoder_arch_name="wrn28_2"                      
-encoder_suffix="_xAE_ep30"
-for thresh in 0.052 0.054
+encoder_arch_name="simnet"                      
+encoder_suffix="_random_start"
+for thresh in 1.145
 do
 CUDA_VISIBLE_DEVICES=0 python benign_user.py \
+                      --lpips \
                       --encoder_arch_name=$encoder_arch_name \
                       --encoder_margin=3.2 \
                       --encoder_suffix=$encoder_suffix \
