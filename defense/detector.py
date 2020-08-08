@@ -82,6 +82,7 @@ class Detector:
         dists = np.concatenate(all_dists)
         k_nearest_dists = np.partition(dists, k-1)[:k, None]
         k_avg_dist = np.mean(k_nearest_dists)
+        #print(self.query_count, k_avg_dist)
 
         self.buffer.append(query)
         self.query_count += 1

@@ -110,8 +110,10 @@ def main():
         blackbox.init(blackbox_dir, device, time=created_on)
     elif encoder_ckp:
         encoder_arch_name = params["encoder_arch_name"]
-        encoder_ckp = osp.join(encoder_ckp, encoder_arch_name, f"{testset_name}-margin-{encoder_margin}")
         encoder = zoo.get_net(encoder_arch_name, modelfamily, num_classes=num_classes)
+        encoder_suffix = params["encoder_suffix"]
+        encoder_arch_name += encoder_suffix
+        encoder_ckp = osp.join(encoder_ckp, encoder_arch_name, f"{testset_name}-margin-{encoder_margin}")
         activation_name = params['activation']
         if activation_name == "sigmoid":
             activation = nn.Sigmoid()
@@ -122,8 +124,7 @@ def main():
 
         encoder.fc = IdLayer(activation=activation).to(device)
 
-        encoder_suffix = params["encoder_suffix"]
-        encoder_arch_name += encoder_suffix
+
 
         ckp = osp.join(encoder_ckp, f"checkpoint.sim-{encoder_margin}.pth.tar")
         print(f"=> Loading similarity encoder checkpoint '{ckp}'")

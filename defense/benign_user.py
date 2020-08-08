@@ -86,6 +86,7 @@ def main():
     blackbox_dir = params["blackbox_dir"]
     encoder_ckp = params["encoder_ckp"]
     encoder_suffix = params["encoder_suffix"]
+    candidate_sets = params["testset_names"]
     encoder_arch_name += encoder_suffix
     # setup similarity encoder
     if use_lpips:
@@ -93,6 +94,9 @@ def main():
         blackbox.init(blackbox_dir, device, time=created_on)
     elif encoder_ckp:
         encoder_arch_name = params["encoder_arch_name"]
+        #encoder = zoo.get_net(encoder_arch_name, modelfamily, num_classes=num_classes)
+        testset_name = candidate_sets[0]
+        modelfamily = datasets.dataset_to_modelfamily[testset_name]
         encoder = zoo.get_net(encoder_arch_name, modelfamily, num_classes=num_classes)
         activation_name = params['activation']
         if activation_name == "sigmoid":
@@ -131,7 +135,6 @@ def main():
     num_workers = 10
 
     #--------- Extraction
-    candidate_sets = params["testset_names"]
     conf_list = []
     for testset_name in candidate_sets:
         valid_datasets = datasets.__dict__.keys()

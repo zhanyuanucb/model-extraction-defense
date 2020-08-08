@@ -99,6 +99,8 @@ class MultiStepJDA:
                 images = Variable(images, requires_grad=True)
                 images = self.augment_step(images, labels)
 
+            images_aug.append(images.cpu())
+
             if self.blinders_fn is not None:
                 with torch.no_grad():
                     images = images * self.STD + self.MEAN
@@ -106,9 +108,7 @@ class MultiStepJDA:
                     images = self.blinders_fn(images)
                     images = (images - self.MEAN) / self.STD
 
-            images = images.cpu()
-            images_aug.append(images)
-            is_adv, y = self.blackbox(images)  # Inspection
+            is_adv, y = self.blackbox(images.cpu())  # Inspection
 #            y = self.blackbox(images)  # Inspection
             labels_aug.append(y.cpu())
         self.steps += self.delta_step
