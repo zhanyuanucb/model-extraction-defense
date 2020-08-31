@@ -100,6 +100,7 @@ def main():
     random_transform = transform_utils.RandomTransforms(modelfamily=modelfamily, normal=sim_norm)
     if sim_norm: # Apply data normalization
         train_transform = datasets.modelfamily_to_transforms[modelfamily]['train']
+        #train_transform = datasets.modelfamily_to_transforms[modelfamily]['test']
         test_transform = datasets.modelfamily_to_transforms[modelfamily]['test']
     else:
         train_transform = datasets.modelfamily_to_transforms[modelfamily]['train2']

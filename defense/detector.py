@@ -25,7 +25,9 @@ from attack.victim.blackbox import Blackbox
 
 
 class Detector:
-    def __init__(self, k, thresh, encoder, mean, std, num_clusters=50, buffer_size=1000, log_suffix="", log_dir="./"):
+    def __init__(self, k, thresh, encoder, mean, std, 
+                 num_clusters=50, buffer_size=1000, memory_capacity=10000,
+                 log_suffix="", log_dir="./"):
         self.blackbox = None
         self.query_count = 0
         self.detection_count = 0
@@ -39,16 +41,18 @@ class Detector:
         self.MEAN = torch.Tensor(mean).reshape([1, 3, 1, 1])
         self.STD = torch.Tensor(std).reshape([1, 3, 1, 1])
         self.num_clusters = num_clusters
+        self.memory_capacity = memory_capacity
+        self.memory_size = 0
 
         # Debug
         #self.log_dir = log_dir
         self.log_file = osp.join(log_dir, f"detector.{log_suffix}.log.tsv")
     
-    def init(self, blackbox_dir, device, time=None):
+    def init(self, blackbox_dir, device, time=None, output_type="one_hot", T=1.):
         self.device = device
         self.MEAN = self.MEAN.to(self.device)
         self.STD = self.STD.to(self.device)
-        self.blackbox = Blackbox.from_modeldir(blackbox_dir, device)
+        self.blackbox = Blackbox.from_modeldir(blackbox_dir, device, output_type=output_type, T=T)
         self._init_log(time)
     
     def _process(self, images):
@@ -57,6 +61,7 @@ class Detector:
             #images = images * self.STD + self.MEAN
             queries = self.encoder(images).cpu().numpy()
         for i, query in enumerate(queries):
+            self.memory_size += 1
             is_attack = self._process_query(query)
             is_adv[i] = 1 if is_attack else 0
         return is_adv
@@ -98,24 +103,27 @@ class Detector:
                 self._write_log(k_avg_dist)
                 self.alarm_count += 1
                 self.clear_memory()
+        if self.memory_size >= self.memory_capacity:
+            self.clear_memory()
         return is_attack
 
     def clear_memory(self):
         self.buffer = []
         self.memory = []
+        self.memory_size = 0
 
     def _init_log(self, time):
         if not osp.exists(self.log_file):
             with open(self.log_file, 'w') as log:
                 if time is not None:
                     log.write(time + '\n')
-                columns = ["Query Count", "Detection Count", "Detected Distance"]
+                columns = ["Query Count", "Memeory Consumed", "Detection Count", "Detected Distance"]
                 log.write('\t'.join(columns) + '\n')
         print(f"Created log file at {self.log_file}")
 
     def _write_log(self, detected_dist):
         with open(self.log_file, 'a') as log:
-            columns = [str(self.query_count), str(self.detection_count // self.num_clusters), str(detected_dist)]
+            columns = [str(self.query_count), f"{self.memory_size}/{self.memory_capacity}", str(self.detection_count // self.num_clusters), str(detected_dist)]
         #else:
         #    columns = [str(self.query_count), str(self.detection_count), str(detected_dist)]
             log.write('\t'.join(columns) + '\n')

@@ -44,38 +44,61 @@
                                      
  
 encoder_name="simnet"
+#encoder_suffix="_xaug"
+#thresh=0.195
 encoder_suffix="_ep30"
 thresh=0.225
-CUDA_VISIBLE_DEVICES=0 python main.py --model_name="wrn28_2" \
-                                     --encoder_arch_name=$encoder_name \
-                                     --encoder_suffix=$encoder_suffix \
-                                     --encoder_margin=3.2 \
-                                     --thresh=$thresh \
-                                     --log_suffix=cinic_autoencoder\
-                                     --blinders_dir=/mydata/model-extraction/model-extraction-defense/attack/adversary/query_blinding/autoencoder_blind/phase2_cinic10_0_ \
-                                     --device_id=0
-                                    
-CUDA_VISIBLE_DEVICES=0 python main.py --model_name="wrn28_2" \
+#encoder_suffix="_random_start"
+#thresh=0.0425
+
+#CUDA_VISIBLE_DEVICES=0 python main.py --model_name="wrn28_2" \
+#                                     --encoder_arch_name=$encoder_name \
+#                                     --encoder_suffix=$encoder_suffix \
+#                                     --encoder_margin=3.2 \
+#                                     --thresh=$thresh \
+#                                     --log_suffix=adv_cinic_autoencoder\
+#                                     --blinders_dir=/mydata/model-extraction/model-extraction-defense/attack/adversary/query_blinding/autoencoder_blind/phase2_cinic10_adv_rand_0_ \
+#                                     --device_id=0
+#                                    
+
+CUDA_VISIBLE_DEVICES=1 python main.py --model_name="wrn28_2" \
+                                       --output_type="one_hot" \
+                                       --T=1.5 \
                                        --encoder_arch_name=$encoder_name \
                                        --encoder_suffix=$encoder_suffix \
                                        --encoder_margin=3.2 \
                                        --thresh=$thresh \
-                                       --log_suffix="_simnet_ep30" \
+                                       --log_suffix="standard"
 
-for blinder in get_uniform_noise get_gaussian_noise get_random_brightness get_random_rotate get_random_contrast get_random_translate get_random_scale get_random_crop
-do
-CUDA_VISIBLE_DEVICES=0 python main.py --model_name="wrn28_2" \
-                                      --encoder_arch_name=$encoder_name \
-                                      --encoder_suffix=$encoder_suffix \
-                                      --encoder_margin=3.2 \
-                                      --k=1 \
-                                      --thresh=$thresh \
-                                      --blinders_dir=$blinder \
-                                      --log_suffix={$blinder}_low \
-                                      --r="low" \
-                                      --device_id=0
-
-done
+#for blinder in get_uniform_noise get_gaussian_noise get_random_brightness get_random_rotate get_random_contrast get_random_translate get_random_scale get_random_crop
+#for blinder in get_random_contrast get_random_translate get_random_brightness
+#do
+#
+##blinder="get_random_translate"
+#CUDA_VISIBLE_DEVICES=1 python main.py --model_name="wrn28_2" \
+#                                      --encoder_arch_name=$encoder_name \
+#                                      --encoder_suffix=$encoder_suffix \
+#                                      --encoder_margin=3.2 \
+#                                      --k=1 \
+#                                      --thresh=$thresh \
+#                                      --blinders_dir=$blinder \
+#                                      --log_suffix={$blinder}_xaug \
+#                                      --r="low" \
+#                                      --device_id=1
+#
+#
+#CUDA_VISIBLE_DEVICES=1 python main.py --model_name="wrn28_2" \
+#                                      --encoder_arch_name=$encoder_name \
+#                                      --encoder_suffix=$encoder_suffix \
+#                                      --encoder_margin=3.2 \
+#                                      --k=1 \
+#                                      --thresh=$thresh \
+#                                      --blinders_dir=$blinder \
+#                                      --log_suffix={$blinder}_xaug \
+#                                      --r="high" \
+#                                      --device_id=1
+#
+#done
 #CUDA_VISIBLE_DEVICES=1 python main.py --model_name=wrn28_2 \
 #                                      --encoder_arch_name=resnet34 \
 #                                      --k=1 \

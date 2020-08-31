@@ -45,6 +45,8 @@ def main():
     parser.add_argument("--t_rand", action="store_true")
     parser.add_argument("--blackbox_dir", metavar="PATH", type=str,
                         default="/mydata/model-extraction/model-extraction-defense/attack/victim/models/cifar10/wrn28_2")
+    parser.add_argument('--output_type', metavar='TYPE', type=str, help='Output type of Blackbox', default="one_hot")
+    parser.add_argument("--T", metavar="TYPE", type=float, default=1.)
     parser.add_argument("--blinders_dir", metavar="PATH", type=str,
                         default=None)
     parser.add_argument("--r", metavar="TYPE", type=str, help="params of random transform blinders",
@@ -100,6 +102,8 @@ def main():
 
     use_lpips = params["lpips"]
     blackbox_dir = params["blackbox_dir"]
+    output_type = params["output_type"]
+    T = params["T"]
     encoder_ckp = params["encoder_ckp"]
     encoder_margin = params["encoder_margin"]
     num_classes = 10
@@ -107,7 +111,7 @@ def main():
     # setup similarity encoder
     if use_lpips:
         blackbox = LpipsDetector(k, thresh, log_suffix=log_suffix, log_dir=log_dir)
-        blackbox.init(blackbox_dir, device, time=created_on)
+        blackbox.init(blackbox_dir, device, time=created_on, output_type=output_type, T=T)
     elif encoder_ckp:
         encoder_arch_name = params["encoder_arch_name"]
         encoder = zoo.get_net(encoder_arch_name, modelfamily, num_classes=num_classes)
@@ -138,9 +142,9 @@ def main():
         print(f"==> Loaded encoder: arch_name: {encoder_arch_name} \n margin: {encoder_margin} \n thresh: {thresh}")
 
         blackbox = Detector(k, thresh, encoder, MEAN, STD, log_suffix=log_suffix, log_dir=log_dir)
-        blackbox.init(blackbox_dir, device, time=created_on)
+        blackbox.init(blackbox_dir, device, time=created_on, output_type=output_type, T=T)
     else:
-        blackbox = Blackbox.from_modeldir(blackbox_dir, device)
+        blackbox = Blackbox.from_modeldir(blackbox_dir, device, output_type=output_type, T=T)
 
     # ----------- Initialize adversary model
     model_name = params["model_name"]
@@ -236,6 +240,11 @@ def main():
     num_workers = 10
     aug_loader = DataLoader(substitute_set, batch_size=batch_size, shuffle=True, num_workers=num_workers)
     #aug_loader = DataLoader(substitute_set, batch_size=batch_size, shuffle=False, num_workers=num_workers)
+
+    mean = torch.Tensor(MEAN).reshape([1, 3, 1, 1])
+    std = torch.Tensor(STD).reshape([1, 3, 1, 1])
+    train_transform = datasets.modelfamily_to_transforms[modelfamily]['train']
+
     substitute_out_path = osp.join(ckp_out_root, f"substitute_set.pt")
     for p in range(1, phi+1):
         if alt_t: # Apply periodic step size
@@ -243,19 +252,22 @@ def main():
 
         if random_adv:
             assert phi == 1, "Random Adversary only needs 1 extraction epoch"
-            substitute_set = ImageTensorSet(seedset_samples) # baseline
+            images_sub = torch.clamp(images_sub * std + mean, 0., 1.)
+            substitute_set = ImageTensorSet([images_sub, labels_sub], transform=train_transform) # baseline
         else:
             images_aug, labels_aug = adversary(aug_loader)
 
+            #images_aug = torch.clamp(images_aug * std + mean, 0., 1.)
             nxt_aug_samples = [images_aug, labels_aug]
             nxt_aug_set = ImageTensorSet(nxt_aug_samples)
             #aug_loader = DataLoader(nxt_aug_set, batch_size=batch_size, shuffle=False, num_workers=num_workers)
             aug_loader = DataLoader(nxt_aug_set, batch_size=batch_size, shuffle=True, num_workers=num_workers)
 
             images_sub = torch.cat([images_sub, images_aug])
+            #images_sub = torch.clamp(images_sub * std + mean, 0., 1.)
             labels_sub = torch.cat([labels_sub, labels_aug])
-            substitute_samples = [images_sub, labels_sub]
-            substitute_set = ImageTensorSet(substitute_samples)
+            substitute_samples = [torch.clamp(images_sub * std + mean, 0., 1.), labels_sub]
+            substitute_set = ImageTensorSet(substitute_samples, transform=train_transform)
 
             torch.save(substitute_samples, substitute_out_path)
             print('=> substitute set ({} samples) written to: {}'.format(substitute_samples[0].size(0), substitute_out_path))
@@ -264,7 +276,8 @@ def main():
         print(f"Current size of the substitute set {len(substitute_set)}")
         test_acc, train_loader = model_utils.train_model(model, substitute_set, ckp_out_root, batch_size=batch_size, epochs=epochs, testset=testloader, criterion_train=criterion_train,
                                                   checkpoint_suffix=checkpoint_suffix, device=device, optimizer=optimizer,
-                                                  scheduler=torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=200,eta_min=0.001),
+                                                  #scheduler=torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=200,eta_min=0.001),
+                                                  scheduler=torch.optim.lr_scheduler.StepLR(optimizer, 100),
                                                   resume=resume, benchmark=best_test_acc)
         best_test_acc = max(test_acc, best_test_acc)
 

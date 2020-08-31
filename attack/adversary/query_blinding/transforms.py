@@ -35,11 +35,23 @@ def get_gaussian_noise(device="cpu", r=0.095):
 
     return add_gaussian_noise
 
+def get_laplace_noise(device="cpu", r=0.095):
+    if r == "high":
+        r = 0.2
+    if r == "low":
+        r = 0.095
+    def add_gaussian_noise(x):
+        noise = r*torch.randn_like(x).to(x.device)
+        x_t = torch.clamp(x + noise, 0., 1.)
+        return x_t
+
+    return add_gaussian_noise
+
 def get_random_contrast(device="cpu", r="low"):
     if r == "high":
-        r = 0.1
-    if r == "low":
         r = 0.55
+    if r == "low":
+        r = 0.1
     def contrast_random(x):
         #alpha = np.random.uniform(min_alpha, max_alpha)
         alpha = torch.rand((x.size(0), 1, 1, 1)).to(x.device)
@@ -75,7 +87,7 @@ def get_random_rotate(device="cpu", r="low"):
 
 def get_random_translate(device="cpu", r="low"):
     if r == "high":
-        r = 0.45
+        r = 0.6
     if r == "low":
         r = 0.05
     def translate_random(x):

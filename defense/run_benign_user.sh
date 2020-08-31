@@ -27,8 +27,8 @@
 #                      --device_id=1
                       
 encoder_arch_name="simnet"                      
-encoder_suffix="_ep30"
-for thresh in 0.225
+encoder_suffix="_xaug"
+for thresh in 0.195
 do
 CUDA_VISIBLE_DEVICES=0 python benign_user.py \
                       --encoder_arch_name=$encoder_arch_name \

@@ -31,10 +31,9 @@ import networks_basic2 as lpips_networks
 def spatial_average(in_tens, keepdim=True):
     return in_tens.mean([2,3],keepdim=keepdim)
 
-class LpipsDetector:
-    def __init__(self, k, thresh, num_clusters=50, buffer_size=1000, memory_capacity=10000, 
-                    log_suffix="", log_dir="./",
-                    net='alex', lpips_path="/mydata/model-extraction/PerceptualSimilarity/models/weights/v0.1"):
+class ELpipsDetector:
+    def __init__(self, k, thresh, num_clusters=50, buffer_size=1000, log_suffix="", log_dir="./",
+                       net='alex', lpips_path="/mydata/model-extraction/PerceptualSimilarity/models/weights/v0.1"):
         self.blackbox = None
         self.query_count = 0
         self.detection_count = 0
@@ -46,8 +45,6 @@ class LpipsDetector:
         self.memory = defaultdict(list)
         self.num_clusters = num_clusters
         self.log_file = osp.join(log_dir, f"detector.{log_suffix}.log.tsv")
-        self.memory_capacity = memory_capacity
-        self.memory_size = 0
 
         # pretrained net + linear layer
         self.encoder = lpips_networks.PNetLin(pnet_type=net)
@@ -62,10 +59,11 @@ class LpipsDetector:
         self.lins = self.encoder.lins
         self.L = self.encoder.L
     
-    def init(self, blackbox_dir, device, time=None, output_type="one_hot", T=1.):
+    def init(self, blackbox_dir, device, time=None):
         self.device = device
         self.encoder = self.encoder.to(self.device)
-        self.blackbox = Blackbox.from_modeldir(blackbox_dir, device, output_type=output_type, T=T)
+        #self.encoder = self.encoder
+        self.blackbox = Blackbox.from_modeldir(blackbox_dir, device)
         self._init_log(time)
     
     def _process(self, images):
@@ -79,7 +77,6 @@ class LpipsDetector:
 
         for i in range(batch_size):
             self.query_count += 1
-            self.memory_size += 1
             if len(self.memory[0]) == 0 and len(self.buffer[0]) < k:
                 for kk in range(self.L):
                     query = queries[kk][i]
@@ -98,6 +95,7 @@ class LpipsDetector:
                 val += res[l]
 
             val = val.cpu().numpy()
+            #val = val.numpy()
             k_nearest_dists = np.partition(val, k-1)[:k, None]
             k_avg_dist = np.mean(k_nearest_dists)
 
@@ -110,10 +108,6 @@ class LpipsDetector:
                     self.clear_memory()
 
             is_adv[i] = 1 if is_attack else 0
-
-            if self.memory_size >= self.memory_capacity:
-                self.clear_memory()
-
         return is_adv
 
     def _process_layer(self, query, kk):
@@ -144,7 +138,6 @@ class LpipsDetector:
     def clear_memory(self):
         self.buffer = defaultdict(list)
         self.memory = defaultdict(list)
-        self.memory_size = 0
 
     def _init_log(self, time):
         if not osp.exists(self.log_file):

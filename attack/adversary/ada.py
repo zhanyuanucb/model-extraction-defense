@@ -8,8 +8,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os.path as osp
 import pickle
+import art
 
-class MultiStepJDA:
+class AdvDataAug:
     def __init__(self, adversary_model, blackbox, mean, std, device, 
                  criterion=model_utils.soft_cross_entropy, t_rand=False,
                  blinders_fn=None, eps=0.1, steps=1, momentum=0, delta_step=0):
@@ -31,13 +32,7 @@ class MultiStepJDA:
         images, labels = [], []
         for x_t, _ in dataloader:
             x_t = x_t.cuda()
-#            is_adv, y_t = self.blackbox(x_t)
-            out = self.blackbox(x_t)
-            if isinstance(out, tuple):
-                is_adv, y_t = out
-            else:
-                y_t = out
-
+            is_adv, y_t = self.blackbox(x_t)
             y_t = y_t.cpu()
             images.append(x_t.cpu())
             labels.append(y_t)
@@ -65,7 +60,11 @@ class MultiStepJDA:
         if self.t_rand:
             jacobian *= -1
         self.v = self.momentum * self.v + self.lam*torch.sign(jacobian)#.to(device)
+        # Clip to valid pixel values
         images = images + self.v
+        images = images * self.STD + self.MEAN
+        images = torch.clamp(images, 0., 1.)
+        images = (images - self.MEAN) / self.STD
         return images
 
     def augment(self, dataloader):
@@ -91,15 +90,9 @@ class MultiStepJDA:
                 labels = targeted_labels.to(self.device)
             self.reset_v(input_shape=images.shape)
 
-            self.adversary_model.eval()
             for i in range(self.steps):
                 images = Variable(images, requires_grad=True)
                 images = self.augment_step(images, labels)
-
-            # Clip to valid pixel values
-            images = images * self.STD + self.MEAN
-            images = torch.clamp(images, 0., 1.)
-            images = (images - self.MEAN) / self.STD
 
             images_aug.append(images.cpu())
 
@@ -111,11 +104,8 @@ class MultiStepJDA:
                     images = self.blinders_fn(images)
                     images = (images - self.MEAN) / self.STD
 
-            out = self.blackbox(images.cpu())
-            if isinstance(out, tuple):
-                is_adv, y = out
-            else:
-                y = out
+            is_adv, y = self.blackbox(images.cpu())  # Inspection
+#            y = self.blackbox(images)  # Inspection
             labels_aug.append(y.cpu())
         self.steps += self.delta_step
         return torch.cat(images_aug), torch.cat(labels_aug)

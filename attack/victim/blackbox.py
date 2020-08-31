@@ -34,12 +34,14 @@ __status__ = "Development"
 gpu_count = torch.cuda.device_count()
 
 class Blackbox(object):
-    def __init__(self, model):
+    def __init__(self, model, output_type="one_hot", T=1):
         self.model = model
         self.model.eval()
+        self.output_type = output_type
+        self.T = T
 
     @classmethod
-    def from_modeldir(cls, model_dir, device=None):
+    def from_modeldir(cls, model_dir, device=None, output_type="one_hot", T=1):
         device = torch.device('cuda') if device is None else device
 
         # What was the model architecture used by this model?
@@ -65,7 +67,7 @@ class Blackbox(object):
         model.load_state_dict(checkpoint['state_dict'])
         print("=> loaded checkpoint (epoch {}, acc={:.2f})".format(epoch, best_test_acc))
 
-        blackbox = cls(model)
+        blackbox = cls(model, output_type=output_type, T=T)
         blackbox.device = device
         return blackbox
 
@@ -76,7 +78,8 @@ class Blackbox(object):
         topk_vals, indices = torch.topk(logits, 1)
         y = torch.zeros_like(logits)
 
-        return y.scatter(1, indices, torch.ones_like(topk_vals))
+        if self.output_type == "one_hot":
+            return y.scatter(1, indices, torch.ones_like(topk_vals))
         #return F.softmax(logits, dim=1)
-        #T, p = 1, F.softmax(logits, dim=1)
-        #return F.softmax(p.pow(T), dim=1)
+        p = F.softmax(logits, dim=1)
+        return F.softmax(p.pow(1/self.T), dim=1)

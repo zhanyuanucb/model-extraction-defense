@@ -5,14 +5,14 @@ import numpy as np
 import random
 import torch
 
-DEFAULT_SEED = 42
-DS_SEED = 123  # uses this seed when splitting datasets
-
-random.seed(DEFAULT_SEED)
-np.random.seed(DEFAULT_SEED)
-torch.manual_seed(DEFAULT_SEED)
-torch.cuda.manual_seed(DEFAULT_SEED)
-torch.backends.cudnn.deterministic = True
+#DEFAULT_SEED = 42
+#DS_SEED = 123  # uses this seed when splitting datasets
+#
+#random.seed(DEFAULT_SEED)
+#np.random.seed(DEFAULT_SEED)
+#torch.manual_seed(DEFAULT_SEED)
+#torch.cuda.manual_seed(DEFAULT_SEED)
+#torch.backends.cudnn.deterministic = True
 
 # -------------- Paths
 CONFIG_PATH = abspath(__file__)

@@ -5,6 +5,7 @@ import os
 import os.path as osp
 import argparse
 from PIL import Image
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -19,12 +20,15 @@ import blinders
 import transforms as mytransforms
 from datetime import datetime
 
+from defense.utils import ImageTensorSet, IdLayer
+
 class BlindersLoss(nn.Module):
 
-    def __init__(self, auto_encoder, f, d=10, c=1, mean=None, std=None):
+    def __init__(self, auto_encoder, f, d=10, c=1, sim_encoder=None, mean=None, std=None):
         super(BlindersLoss, self).__init__()
         self.BCELoss = nn.BCELoss()
         self.auto_encoder = auto_encoder
+        self.sim_encoder=sim_encoder
         self.f = f
         self.d = d
         self.c = c
@@ -62,6 +66,16 @@ class BlindersLoss(nn.Module):
         x_diff = (x1_hat - x2_hat).view(x.size(0), -1)
         C = torch.clamp(torch.mean(torch.norm(x_diff, p=2, dim=1))**2, 0, self.d**2)
 
+        if self.sim_encoder:
+            x1_norm = (x1_hat - self.MEAN) / self.STD
+            x2_norm = (x2_hat - self.MEAN) / self.STD
+            sim1 = self.sim_encoder(x1_norm)
+            sim2 = self.sim_encoder(x2_norm)
+            #print(x1_hat.shape, sim1.shape)
+            sim_diff = (sim1 - sim2).view(x.size(0), -1)
+            X = torch.clamp(torch.mean(torch.norm(sim_diff, p=2, dim=1))**2, 0, self.d**2)
+            return H - self.c*C - X, H, self.c*C, X
+
         return H - self.c*C, H, self.c*C
 
 class AutoEncoderBCELoss(nn.Module):
@@ -87,6 +101,13 @@ def main():
     parser.add_argument('--batch_size', metavar='TYPE', type=int, help='Batch size of queries', default=64)
     parser.add_argument('--lr', metavar='TYPE', type=float, default=0.01)
     parser.add_argument('--train_epochs', metavar='TYPE', type=int, help='Training epochs', default=10)
+#    parser.add_argument("--encoder_ckp", metavar="PATH", type=str, default=None)
+    parser.add_argument("--encoder_ckp", metavar="PATH", type=str,
+                        default="/mydata/model-extraction/model-extraction-defense/defense/similarity_encoding/")
+    parser.add_argument("--encoder_arch_name", metavar="TYPE", type=str, default="simnet")
+    parser.add_argument('--activation', metavar='TYPE', type=str, help='Activation name', default=None)
+    parser.add_argument("--encoder_suffix", metavar="TYPE", type=str, default="")
+    parser.add_argument("--encoder_margin", metavar="TYPE", type=float, default=3.2)
     parser.add_argument('--optimizer_name', metavar='TYPE', type=str, help='Optimizer name', default="adam")
     parser.add_argument('--ckpt_suffix', metavar='TYPE', type=str, default="")
     parser.add_argument('--folder_suffix', metavar='TYPE', type=str, default="")
@@ -144,6 +165,37 @@ def main():
     model = model.to(device)
     # ------------
 
+    encoder_ckp = params["encoder_ckp"]
+    sim_encoder = None
+    if encoder_ckp:
+        encoder_arch_name = params["encoder_arch_name"]
+        encoder_margin = params["encoder_margin"]
+        sim_encoder = zoo.get_net(encoder_arch_name, modelfamily, num_classes=num_classes)
+        encoder_suffix = params["encoder_suffix"]
+        encoder_arch_name += encoder_suffix
+        #encoder_ckp = osp.join(encoder_ckp, encoder_arch_name, f"{dataset_name}-margin-{encoder_margin}")
+        encoder_ckp = osp.join(encoder_ckp, encoder_arch_name, f"CIFAR10-margin-{encoder_margin}")
+        activation_name = params['activation']
+        if activation_name == "sigmoid":
+            activation = nn.Sigmoid()
+            print(f"Encoder activation: {activation_name}")
+        else:
+            print("Normal activation")
+            activation = None
+
+        sim_encoder.fc = IdLayer(activation=activation).to(device)
+
+        ckp = osp.join(encoder_ckp, f"checkpoint.sim-3.2.pth.tar")
+        print(f"=> Loading similarity encoder checkpoint '{ckp}'")
+        checkpoint = torch.load(ckp)
+        start_epoch = checkpoint['epoch']
+        sim_encoder.load_state_dict(checkpoint['state_dict'])
+        print("===> loaded checkpoint (epoch {})".format(checkpoint['epoch']))
+        #encoder.fc = IdLayer(activation=activation)
+        sim_encoder = sim_encoder.to(device)
+        sim_encoder.eval()
+        print(f"==> Loaded encoder: arch_name: {encoder_arch_name} \n margin: {encoder_margin}")
+
     # ------------ Set up Auto-encoder
     blinders_fn = mytransforms.get_gaussian_noise(device=device, r=0.095)
     auto_encoder = blinders.AutoencoderBlinders(blinders_fn)
@@ -151,7 +203,7 @@ def main():
     # ------------
 
     # ------------ Set up loss function
-    blindloss = BlindersLoss(auto_encoder, model, mean=MEAN, std=STD)
+    blindloss = BlindersLoss(auto_encoder, model, sim_encoder=sim_encoder, mean=MEAN, std=STD)
     # ------------
 
     # ------------ Set up training

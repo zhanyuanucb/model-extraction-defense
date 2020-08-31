@@ -41,23 +41,26 @@
 #                              --dataset_name=CIFAR10
 #
 
-CUDA_VISIBLE_DEVICES=0 python train.py --train_epochs=10 --out_dir=/mydata/model-extraction/model-extraction-defense/attack/adversary/query_blinding/autoencoder_blind \
+gpu_id=1
+CUDA_VISIBLE_DEVICES=$gpu_id python train.py --train_epochs=60 \
+                                  --out_dir=/mydata/model-extraction/model-extraction-defense/attack/adversary/query_blinding/autoencoder_blind \
                                   --ckp_dir=/mydata/model-extraction/model-extraction-defense/attack/adversary/query_blinding/f_cinic \
                                   --model_name=wrn40 \
+                                  --resume=/mydata/model-extraction/model-extraction-defense/attack/adversary/query_blinding/autoencoder_blind/phase2_cinic10_adv_rand_0_/checkpoint.blind.pth.tar \
                                   --dataset_name=CINIC10 \
-                                  --folder_suffix=cinic10
+                                  --folder_suffix=cinic10_adv_rand
 
-CUDA_VISIBLE_DEVICES=0 python val_autoencoder_acc.py  --ckp_path=/mydata/model-extraction/model-extraction-defense/attack/adversary/query_blinding/f_cinic \
+CUDA_VISIBLE_DEVICES=$gpu_id python val_autoencoder_acc.py  --ckp_path=/mydata/model-extraction/model-extraction-defense/attack/adversary/query_blinding/f_cinic \
                                --num_classes=10 \
                                --model_name=wrn40 \
-                               --auto_path=/mydata/model-extraction/model-extraction-defense/attack/adversary/query_blinding/autoencoder_blind/phase2_cinic10_0 \
+                               --auto_path=/mydata/model-extraction/model-extraction-defense/attack/adversary/query_blinding/autoencoder_blind/phase2_cinic10_adv_rand_0 \
                                --dataset_name=CIFAR10
 
-CUDA_VISIBLE_DEVICES=0 python val_autoencoder_acc.py  --ckp_path=/mydata/model-extraction/model-extraction-defense/attack/victim/models/cifar10/wrn28 \
+CUDA_VISIBLE_DEVICES=$gpu_id python val_autoencoder_acc.py  --ckp_path=/mydata/model-extraction/model-extraction-defense/attack/victim/models/cifar10/wrn28 \
                                --model_name=wrn28 \
                                --num_classes=10 \
-                               --auto_path=/mydata/model-extraction/model-extraction-defense/attack/adversary/query_blinding/autoencoder_blind/phase2_cinic10_0 \
+                               --auto_path=/mydata/model-extraction/model-extraction-defense/attack/adversary/query_blinding/autoencoder_blind/phase2_cinic10_adv_rand_0 \
                                --dataset_name=CIFAR10
 
-CUDA_VISIBLE_DEVICES=0 python inspect_autoencoder.py --ckp_dir=/mydata/model-extraction/model-extraction-defense/attack/adversary/query_blinding/autoencoder_blind/phase2_cinic10_0 \
+CUDA_VISIBLE_DEVICES=$gpu_id python inspect_autoencoder.py --ckp_dir=/mydata/model-extraction/model-extraction-defense/attack/adversary/query_blinding/autoencoder_blind/phase2_cinic10_adv_rand_0 \
                               --dataset_name=CIFAR10

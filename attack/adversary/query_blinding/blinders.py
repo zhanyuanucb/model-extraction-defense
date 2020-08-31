@@ -120,7 +120,8 @@ def train_step(model, train_loader, criterion, optimizer, epoch, device, schedul
     for batch_idx, (inputs, targets) in enumerate(train_loader):
         inputs, targets = inputs.to(device), targets.to(device)
         optimizer.zero_grad()
-        loss, H, C = criterion(inputs)
+        output = criterion(inputs)
+        loss = output[0]
         #if loss.item() == float("-inf"):
         #    print(H.item(), C.item())
         #    exit(1)
@@ -157,7 +158,8 @@ def test_step(model, test_loader, criterion, device, epoch=0., silent=False):
         for batch_idx, (inputs, targets) in enumerate(test_loader):
             #print(f"testing batch {batch_idx}")
             inputs, targets = inputs.to(device), targets.to(device)
-            loss, H, C = criterion(inputs)
+            output = criterion(inputs)
+            loss = output[0]
 
             test_loss += loss.item()
             total += targets.size(0)
