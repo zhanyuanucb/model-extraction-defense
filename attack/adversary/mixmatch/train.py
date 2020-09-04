@@ -2,6 +2,10 @@ from __future__ import print_function
 import sys
 sys.path.append('/mydata/model-extraction/model-extraction-defense/')
 import modelzoo.zoo as zoo
+from attack import datasets
+import attack.utils.model as model_utils
+from defense.utils import ImageTensorSet
+import attack.config as cfg
 
 import argparse
 import os
@@ -20,7 +24,7 @@ import torch.utils.data as data
 import torchvision.transforms as transforms
 import torch.nn.functional as F
 
-import models.wideresnet as models
+#import models.wideresnet as models
 import dataset.cifar10 as dataset
 from utils import Bar, Logger, AverageMeter, accuracy, mkdir_p, savefig
 from tensorboardX import SummaryWriter
@@ -35,6 +39,11 @@ parser.add_argument('--batch-size', default=64, type=int, metavar='N',
                     help='train batchsize')
 parser.add_argument('--lr', '--learning-rate', default=0.002, type=float,
                     metavar='LR', help='initial learning rate')
+parser.add_argument('--dataset_name', default='CINIC10', type=str,
+                    help='Dataset name')
+parser.add_argument('--seed_dir', default='', type=str, metavar='PATH',
+                    help='path to seed images (default: none)')
+
 # Checkpoints
 parser.add_argument('--resume', default='', type=str, metavar='PATH',
                     help='path to latest checkpoint (default: none)')
@@ -89,6 +98,15 @@ def train_val_split(labels, n_labeled_per_class):
 
     return train_labeled_idxs, train_unlabeled_idxs, val_idxs
 
+class TransformTwice:
+    def __init__(self, transform):
+        self.transform = transform
+
+    def __call__(self, inp):
+        out1 = self.transform(inp)
+        out2 = self.transform(inp)
+        return out1, out2
+
 def main():
     global best_acc
 
@@ -108,27 +126,55 @@ def main():
     #])
 
     #TODO: modify
-    transform_train = datasets.modelfamily_to_transforms[modelfamily]['train']
+    modelfamily = "cinic10"
+
+    MEAN, STD = cfg.NORMAL_PARAMS["cifar"]
+    mean = torch.Tensor(MEAN).reshape([1, 3, 1, 1])
+    std = torch.Tensor(STD).reshape([1, 3, 1, 1])
+    dataset_name = args.dataset_name
+    transform_train = datasets.modelfamily_to_transforms["cifar"]['train']
     transform_val = datasets.modelfamily_to_transforms[modelfamily]['test']
-    trainset = datasets.__dict__[dataset_name](train=True, transform=transform_train) # Augment data while training
-    valset = datasets.__dict__[dataset_name](train=False, transform=transform_val)
+
+    #base_dataset = datasets.__dict__[dataset_name](split="train", transform=transform_train) # Augment data while training
+    #train_labeled_idxs, train_unlabeled_idxs, val_idxs = train_val_split(base_dataset.targets, int(args.n_labeled/10))
+
+    [images_sub, labels_sub] = torch.load(args.seed_dir) 
+    print(f"labels_sub shape: {labels_sub.shape}")
+    _, labels_sub = labels_sub.max(1)
+    print(f"Loaded {labels_sub.size(0)} labeled images")
+
+    images_sub = torch.clamp(images_sub * std + mean, 0., 1.)
+    train_labeled_set = ImageTensorSet([images_sub, labels_sub], transform=transform_train) # baseline
+    #train_labeled_set = datasets.__dict__["CIFAR10"](train=True, transform=transform_train)
+    if dataset_name == "CINIC10":
+        train_unlabeled_set = datasets.__dict__[dataset_name](split="train", transform=TransformTwice(transform_train))
+    else:
+        train_unlabeled_set = datasets.__dict__[dataset_name](train=True, transform=TransformTwice(transform_train))
+    val_set = datasets.__dict__["CIFAR10"](train=False, transform=transform_val)
+    test_set = datasets.__dict__["CINIC10"](split="test", transform=transform_val)
 
     # Split labeled/unlabeled dataset
     
-    train_labeled_idxs, train_unlabeled_idxs, val_idxs = train_val_split(base_dataset.targets, int(n_labeled/10))
-    train_labeled_set, train_unlabeled_set, val_set, test_set = dataset.get_cifar10('./data', args.n_labeled, transform_train=transform_train, transform_val=transform_val)
-
-    labeled_trainloader = data.DataLoader(train_labeled_set, batch_size=args.batch_size, shuffle=True, num_workers=0, drop_last=True)
-    unlabeled_trainloader = data.DataLoader(train_unlabeled_set, batch_size=args.batch_size, shuffle=True, num_workers=0, drop_last=True)
+    labeled_trainloader = data.DataLoader(train_labeled_set, batch_size=args.batch_size, shuffle=True, 
+                                          num_workers=0, drop_last=True)
+    unlabeled_trainloader = data.DataLoader(train_unlabeled_set, batch_size=args.batch_size, 
+                                          shuffle=True, num_workers=0, drop_last=True)
     val_loader = data.DataLoader(val_set, batch_size=args.batch_size, shuffle=False, num_workers=0)
-    test_loader = data.DataLoader(test_set, batch_size=args.batch_size, shuffle=False, num_workers=0)
+    if test_set:
+        n_sample = 10000
+        total_test = len(test_set)
+        sample_idx = np.random.choice(range(total_test), n_sample, replace=False)
+        print(f"Total {total_test} test samples, sample out {n_sample}")
+        test_loader = data.DataLoader(test_set, batch_size=args.batch_size, shuffle=False, num_workers=0,
+                                      sampler=sample_idx)
+    else:
+        test_loader = None
 
     # Model
     print("==> creating WRN-28-2")
 
     def create_model(arch_name="wrn28_2", modelfamily="cifar", num_classes=10, ema=False):
-        model = zoo.get_net(arch_name, modelfamily, num_classes)
-        model = models.WideResNet(num_classes=10)
+        model = zoo.get_net(arch_name, modelfamily, num_classes=num_classes)
         model = model.cuda()
 
         if ema:
@@ -156,17 +202,18 @@ def main():
         # Load checkpoint.
         print('==> Resuming from checkpoint..')
         assert os.path.isfile(args.resume), 'Error: no checkpoint directory found!'
-        args.out = os.path.dirname(args.resume)
+        #args.out = os.path.dirname(args.resume)
         checkpoint = torch.load(args.resume)
         best_acc = checkpoint['best_acc']
+        print(f"Ckpt best acc: {best_acc}")
         start_epoch = checkpoint['epoch']
         model.load_state_dict(checkpoint['state_dict'])
-        ema_model.load_state_dict(checkpoint['ema_state_dict'])
-        optimizer.load_state_dict(checkpoint['optimizer'])
-        logger = Logger(os.path.join(args.out, 'log.txt'), title=title, resume=True)
-    else:
-        logger = Logger(os.path.join(args.out, 'log.txt'), title=title)
-        logger.set_names(['Train Loss', 'Train Loss X', 'Train Loss U',  'Valid Loss', 'Valid Acc.', 'Test Loss', 'Test Acc.'])
+        ema_model.load_state_dict(checkpoint['state_dict'])
+        #optimizer.load_state_dict(checkpoint['optimizer'])
+        #logger = Logger(os.path.join(args.out, 'log.txt'), title=title, resume=True)
+#    else:
+    logger = Logger(os.path.join(args.out, 'log.txt'), title=title)
+    logger.set_names(['Train Loss', 'Train Loss X', 'Train Loss U',  'Valid Loss', 'Valid Acc.', 'Test Loss', 'Test Acc.'])
 
     writer = SummaryWriter(args.out)
     step = 0
@@ -197,6 +244,7 @@ def main():
         # save model
         is_best = val_acc > best_acc
         best_acc = max(val_acc, best_acc)
+        print(f"Best Accuracy: {best_acc}")
         save_checkpoint({
                 'epoch': epoch + 1,
                 'state_dict': model.state_dict(),
@@ -356,6 +404,7 @@ def validate(valloader, model, criterion, epoch, use_cuda, mode):
                 inputs, targets = inputs.cuda(), targets.cuda(non_blocking=True)
             # compute output
             outputs = model(inputs)
+            #loss = criterion(outputs, targets)
             loss = criterion(outputs, targets)
 
             # measure accuracy and record loss

@@ -8,6 +8,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os.path as osp
 import pickle
+import foolbox
+from foolbox.attacks import LinfPGD as PGD
+from foolbox.criteria import Misclassification, TargetedMisclassification
+from foolbox.distances import Distance
+#from foolbox.adversarial import Adversarial
 
 class MultiStepJDA:
     def __init__(self, adversary_model, blackbox, mean, std, device, 
@@ -121,4 +126,64 @@ class MultiStepJDA:
         return torch.cat(images_aug), torch.cat(labels_aug)
     
     def __call__(self, dataloader):
+        return self.augment(dataloader)
+
+class AdvDA(MultiStepJDA):
+    def __init__(self, adversary_model, blackbox, mean, std, device, 
+                 blinders_fn=None, eps=0.01, attack_alg=PGD, **kwarg):
+        self.adversary_model = adversary_model
+        self.blackbox = blackbox
+        self.blinders_fn = blinders_fn
+        self.get_adv_criterion = Misclassification
+        self.attack = attack_alg()
+        self.eps = eps
+        self.MEAN = torch.Tensor(mean).reshape([1, 3, 1, 1]).to(device)
+        self.STD = torch.Tensor(std).reshape([1, 3, 1, 1]).to(device)
+        self.device = device
+
+    def normalize(self, images):
+        return (images-self.MEAN) / self.STD
+
+    def denormalize(self, images):
+        return torch.clamp(images*self.STD + self.MEAN, 0., 1.)
+
+    def augment(self, dataloader):
+        print("Start adversarial data augmentaion...")
+        images_aug, labels_aug = [], []
+        adv_count = 0
+        for images, labels in dataloader:
+            #labels = labels.argmax(-1)
+            images = images.to(self.device)
+            images = self.denormalize(images)
+            batch_size = images.size(0)
+
+            labels = labels.argmax(-1).to(self.device)
+
+            adv_criterion = self.get_adv_criterion(labels)
+            fmodel = foolbox.models.PyTorchModel(self.adversary_model, bounds=(0, 1), preprocessing={"mean":self.MEAN, "std":self.STD})
+            _, images, is_adv = self.attack(fmodel, images, criterion=adv_criterion, epsilons=self.eps)
+            adv_count += sum(is_adv)
+            images = self.normalize(images)
+
+            images_aug.append(images.cpu())
+
+            if self.blinders_fn is not None:
+                # Query blinding
+                with torch.no_grad():
+                    images = self.denormalize(images)
+                    images = self.blinders_fn(images)
+                    images = self.normalize(images)
+
+            out = self.blackbox(images.cpu())
+            if isinstance(out, tuple):
+                is_adv, y = out
+            else:
+                y = out
+            labels_aug.append(y.cpu())
+        all_images_aug = torch.cat(images_aug)
+        print(f"{adv_count}/{all_images_aug.size(0)} are adversarial")
+        return all_images_aug, torch.cat(labels_aug)
+
+    def __call__(self, dataloader):
+        self.adversary_model.eval()
         return self.augment(dataloader)

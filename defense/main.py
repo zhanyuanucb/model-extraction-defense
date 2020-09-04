@@ -16,7 +16,7 @@ from attack import datasets
 import modelzoo.zoo as zoo
 from detector import *
 from detector_lpips import *
-from attack.adversary.jda import MultiStepJDA
+from attack.adversary.jda import MultiStepJDA, AdvDA
 from attack.adversary.query_blinding.blinders import AutoencoderBlinders
 import attack.adversary.query_blinding.transforms as blinders_transforms
 from utils import ImageTensorSet, IdLayer
@@ -43,6 +43,8 @@ def main():
     parser.add_argument("--epochs", metavar="TYPE", type=int, help="extraction training epochs", default=10)
     parser.add_argument("--momentum", metavar="TYPE", type=float, help="multi-step JDA momentum", default=0.7)
     parser.add_argument("--t_rand", action="store_true")
+    parser.add_argument("--adv_aug", action="store_true")
+    parser.add_argument("--exp_complexity", metavar="TYPE", type=str, default="linear")
     parser.add_argument("--blackbox_dir", metavar="PATH", type=str,
                         default="/mydata/model-extraction/model-extraction-defense/attack/victim/models/cifar10/wrn28_2")
     parser.add_argument('--output_type', metavar='TYPE', type=str, help='Output type of Blackbox', default="one_hot")
@@ -73,6 +75,7 @@ def main():
     parser.add_argument("--log_suffix", metavar="TYPE", type=str, default="testing")
     parser.add_argument("--params_search", action="store_true")
     parser.add_argument("--random_adv", action="store_true")
+    parser.add_argument("--adjust_epochs", metavar="TYPE", type=int, help="extraction training epochs", default=0)
     args = parser.parse_args()
     params = vars(args)
 
@@ -160,6 +163,7 @@ def main():
     momentum= params["momentum"]
     delta_step = params["delta_step"]
     t_rand = params["t_rand"]
+    adv_aug = params["adv_aug"]
     print(f"Detector config:\n eps: {eps} \n steps: {steps} \n momentum: {momentum} \n t_rand: {t_rand} \n delta_step: {delta_step}")
 
     # set up query blinding
@@ -186,8 +190,11 @@ def main():
     else:
         auto_encoder = None
 
-    adversary = MultiStepJDA(model, blackbox, MEAN, STD, device, blinders_fn=auto_encoder, t_rand=t_rand, 
-                             eps=eps, steps=steps, momentum=momentum, delta_step=delta_step) 
+    if adv_aug:
+        adversary = AdvDA(model, blackbox, MEAN, STD, device, blinders_fn=auto_encoder, eps=eps)
+    else:
+        adversary = MultiStepJDA(model, blackbox, MEAN, STD, device, blinders_fn=auto_encoder, t_rand=t_rand, 
+                                eps=eps, steps=steps, momentum=momentum, delta_step=delta_step) 
 
     # ----------- Set up seedset
     #seedset_path = osp.join(params["seedset_dir"], 'seed.pt')
@@ -236,6 +243,8 @@ def main():
     testloader = testset
     epochs = params["epochs"]
     resume = params["resume"]
+    exp_complexity = params["exp_complexity"]
+    assert exp_complexity in ["linear", "exponential"], "exp_complexity in ['linear', 'exponential']"
     best_test_acc = -1
     num_workers = 10
     aug_loader = DataLoader(substitute_set, batch_size=batch_size, shuffle=True, num_workers=num_workers)
@@ -248,6 +257,7 @@ def main():
     substitute_out_path = osp.join(ckp_out_root, f"substitute_set.pt")
     for p in range(1, phi+1):
         if alt_t: # Apply periodic step size
+            print("Apply periodic step size")
             adversary.JDA.lam *= (-1)**(p//alt_t)
 
         if random_adv:
@@ -255,26 +265,48 @@ def main():
             images_sub = torch.clamp(images_sub * std + mean, 0., 1.)
             substitute_set = ImageTensorSet([images_sub, labels_sub], transform=train_transform) # baseline
         else:
-            images_aug, labels_aug = adversary(aug_loader)
-
-            #images_aug = torch.clamp(images_aug * std + mean, 0., 1.)
-            nxt_aug_samples = [images_aug, labels_aug]
-            nxt_aug_set = ImageTensorSet(nxt_aug_samples)
-            #aug_loader = DataLoader(nxt_aug_set, batch_size=batch_size, shuffle=False, num_workers=num_workers)
-            aug_loader = DataLoader(nxt_aug_set, batch_size=batch_size, shuffle=True, num_workers=num_workers)
+            images_aug, labels_aug = adversary(aug_loader) 
 
             images_sub = torch.cat([images_sub, images_aug])
-            #images_sub = torch.clamp(images_sub * std + mean, 0., 1.)
             labels_sub = torch.cat([labels_sub, labels_aug])
+
+            if exp_complexity == "linear":
+                print("Linear expansion")
+                #images_aug = torch.clamp(images_aug * std + mean, 0., 1.)
+                nxt_aug_samples = [images_aug, labels_aug]
+                nxt_aug_set = ImageTensorSet(nxt_aug_samples)
+                #aug_loader = DataLoader(nxt_aug_set, batch_size=batch_size, shuffle=False, num_workers=num_workers)
+            else:
+                print("Exponential expansion")
+                nxt_aug_set = ImageTensorSet([images_sub, labels_sub])
+
+            #if aug_samples:
+
+            #    aug_loader = DataLoader(nxt_aug_set, batch_size=batch_size, shuffle=False, num_workers=num_workers, 
+            #                        sampler=torch.utils.data.sampler.SubsetRandomSampler(val_subset_indices))
+
+            #else:
+            aug_loader = DataLoader(nxt_aug_set, batch_size=batch_size, shuffle=True, num_workers=num_workers)
+
+            torch.save([images_sub, labels_sub], substitute_out_path)
             substitute_samples = [torch.clamp(images_sub * std + mean, 0., 1.), labels_sub]
             substitute_set = ImageTensorSet(substitute_samples, transform=train_transform)
 
-            torch.save(substitute_samples, substitute_out_path)
             print('=> substitute set ({} samples) written to: {}'.format(substitute_samples[0].size(0), substitute_out_path))
 
         print(f"Substitute training epoch {p}")
         print(f"Current size of the substitute set {len(substitute_set)}")
         test_acc, train_loader = model_utils.train_model(model, substitute_set, ckp_out_root, batch_size=batch_size, epochs=epochs, testset=testloader, criterion_train=criterion_train,
+                                                  checkpoint_suffix=checkpoint_suffix, device=device, optimizer=optimizer,
+                                                  #scheduler=torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=200,eta_min=0.001),
+                                                  scheduler=torch.optim.lr_scheduler.StepLR(optimizer, 100),
+                                                  resume=resume, benchmark=best_test_acc)
+        best_test_acc = max(test_acc, best_test_acc)
+
+    adjust_epochs = params["adjust_epochs"]
+    if adjust_epochs > 0:
+        print("=> Enter adjustment epochs...")
+        test_acc, train_loader = model_utils.train_model(model, substitute_set, ckp_out_root, batch_size=batch_size, epochs=adjust_epochs, testset=testloader, criterion_train=criterion_train,
                                                   checkpoint_suffix=checkpoint_suffix, device=device, optimizer=optimizer,
                                                   #scheduler=torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=200,eta_min=0.001),
                                                   scheduler=torch.optim.lr_scheduler.StepLR(optimizer, 100),

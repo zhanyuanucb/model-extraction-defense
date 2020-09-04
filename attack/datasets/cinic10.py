@@ -8,9 +8,10 @@ import attack.config as cfg
 
 
 class CINIC10(ImageFolder):
-    def __init__(self, train=True, transform=None, target_transform=None):
-        if train:
-            root = osp.join(cfg.DATASET_ROOT, "CINIC10_2", "train")
-        else:
-            root = osp.join(cfg.DATASET_ROOT, "CINIC10_2", "valid")
+    def __init__(self, split="train", transform=None, target_transform=None):
+#        if train:
+#            root = osp.join(cfg.DATASET_ROOT, "CINIC10_2", "train")
+#        else:
+#            root = osp.join(cfg.DATASET_ROOT, "CINIC10_2", "valid")
+        root = osp.join(cfg.DATASET_ROOT, "CINIC10_2", split)
         super().__init__(root, transform=transform, target_transform=target_transform)

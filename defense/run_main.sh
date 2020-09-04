@@ -63,12 +63,18 @@ thresh=0.225
 
 CUDA_VISIBLE_DEVICES=1 python main.py --model_name="wrn28_2" \
                                        --output_type="one_hot" \
-                                       --T=1.5 \
+                                       --exp_complexity="exponential" \
+                                       --epochs=10 \
+                                       --adv_aug \
+                                       --adjust_epochs=200 \
+                                       --phi=3 \
+                                       --eps=0.01 \
                                        --encoder_arch_name=$encoder_name \
                                        --encoder_suffix=$encoder_suffix \
                                        --encoder_margin=3.2 \
                                        --thresh=$thresh \
-                                       --log_suffix="standard"
+                                       --log_suffix="adv_exponential_expand" \
+                                       --device_id=1
 
 #for blinder in get_uniform_noise get_gaussian_noise get_random_brightness get_random_rotate get_random_contrast get_random_translate get_random_scale get_random_crop
 #for blinder in get_random_contrast get_random_translate get_random_brightness

@@ -6,7 +6,7 @@ import random
 import torch
 
 #DEFAULT_SEED = 42
-#DS_SEED = 123  # uses this seed when splitting datasets
+DS_SEED = 123  # uses this seed when splitting datasets
 #
 #random.seed(DEFAULT_SEED)
 #np.random.seed(DEFAULT_SEED)
