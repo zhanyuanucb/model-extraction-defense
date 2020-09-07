@@ -238,8 +238,6 @@ def main():
     alt_t = params["alt_t"]
     steps = params["steps"]
     batch_size = params["batch_size"]
-    budget = (phi+1)*len(substitute_set)
-    checkpoint_suffix = '.budget{}'.format(budget)
     testloader = testset
     epochs = params["epochs"]
     resume = params["resume"]
@@ -272,7 +270,7 @@ def main():
 
             if exp_complexity == "linear":
                 print("Linear expansion")
-                #images_aug = torch.clamp(images_aug * std + mean, 0., 1.)
+                images_aug = torch.clamp(images_aug * std + mean, 0., 1.)
                 nxt_aug_samples = [images_aug, labels_aug]
                 nxt_aug_set = ImageTensorSet(nxt_aug_samples)
                 #aug_loader = DataLoader(nxt_aug_set, batch_size=batch_size, shuffle=False, num_workers=num_workers)
@@ -297,7 +295,7 @@ def main():
         print(f"Substitute training epoch {p}")
         print(f"Current size of the substitute set {len(substitute_set)}")
         test_acc, train_loader = model_utils.train_model(model, substitute_set, ckp_out_root, batch_size=batch_size, epochs=epochs, testset=testloader, criterion_train=criterion_train,
-                                                  checkpoint_suffix=checkpoint_suffix, device=device, optimizer=optimizer,
+                                                  device=device, optimizer=optimizer,
                                                   #scheduler=torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=200,eta_min=0.001),
                                                   scheduler=torch.optim.lr_scheduler.StepLR(optimizer, 100),
                                                   resume=resume, benchmark=best_test_acc)
@@ -307,7 +305,7 @@ def main():
     if adjust_epochs > 0:
         print("=> Enter adjustment epochs...")
         test_acc, train_loader = model_utils.train_model(model, substitute_set, ckp_out_root, batch_size=batch_size, epochs=adjust_epochs, testset=testloader, criterion_train=criterion_train,
-                                                  checkpoint_suffix=checkpoint_suffix, device=device, optimizer=optimizer,
+                                                  device=device, optimizer=optimizer,
                                                   #scheduler=torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=200,eta_min=0.001),
                                                   scheduler=torch.optim.lr_scheduler.StepLR(optimizer, 100),
                                                   resume=resume, benchmark=best_test_acc)
