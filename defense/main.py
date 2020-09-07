@@ -270,10 +270,9 @@ def main():
 
             if exp_complexity == "linear":
                 print("Linear expansion")
-                images_aug = torch.clamp(images_aug * std + mean, 0., 1.)
+                #images_aug = torch.clamp(images_aug * std + mean, 0., 1.)
                 nxt_aug_samples = [images_aug, labels_aug]
                 nxt_aug_set = ImageTensorSet(nxt_aug_samples)
-                #aug_loader = DataLoader(nxt_aug_set, batch_size=batch_size, shuffle=False, num_workers=num_workers)
             else:
                 print("Exponential expansion")
                 nxt_aug_set = ImageTensorSet([images_sub, labels_sub])

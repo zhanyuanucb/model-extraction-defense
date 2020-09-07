@@ -13,7 +13,7 @@ import shutil
 #dataset_dir = osp.join(cfg.DATASET_ROOT, "CINIC10_2/train") 
 #dest_root = osp.join("/mydata/model-extraction/data/cinic10_balanced_subset65000")
 dataset_dir = osp.join(cfg.DATASET_ROOT, "cifar10/train") 
-SIZE = 150
+SIZE = 200
 dest_root = osp.join(f"/mydata/model-extraction/data/cifar10_balanced_subset{SIZE*10}")
 create_dir(dest_root)
 

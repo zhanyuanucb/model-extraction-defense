@@ -60,14 +60,14 @@ thresh=0.225
 #                                     --blinders_dir=/mydata/model-extraction/model-extraction-defense/attack/adversary/query_blinding/autoencoder_blind/phase2_cinic10_adv_rand_0_ \
 #                                     --device_id=0
 #                                    
-for seedset_dir in /mydata/model-extraction/data/cifar10_balanced_subset2500 /mydata/model-extraction/data/cifar10_balanced_subset1500 /mydata/model-extraction/data/cifar10_balanced_subset1000
+for seedset_dir in /mydata/model-extraction/data/cifar10_balanced_subset2500 /mydata/model-extraction/data/cifar10_balanced_subset2000 /mydata/model-extraction/data/cifar10_balanced_subset1000
 do
 CUDA_VISIBLE_DEVICES=1 python main.py --model_name="wrn28_2" \
---seedset_dir=$seedset_dir
+--seedset_dir=$seedset_dir \
                                        --output_type="one_hot" \
                                        --t_rand \
                                        --epochs=10 \
-                                       --adjust_epochs=200 \
+                                       --adjust_epochs=120 \
                                        --phi=3 \
                                        --eps=0.01 \
                                        --encoder_arch_name=$encoder_name \

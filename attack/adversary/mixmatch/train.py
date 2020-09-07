@@ -79,25 +79,6 @@ np.random.seed(args.manualSeed)
 
 best_acc = 0  # best test accuracy
 
-def train_val_split(labels, n_labeled_per_class):
-    # Reference: https://github.com/YU1ut/MixMatch-pytorch/blob/master/dataset/cifar10.py#L32
-    labels = np.array(labels)
-    train_labeled_idxs = []
-    train_unlabeled_idxs = []
-    val_idxs = []
-
-    for i in range(10):
-        idxs = np.where(labels == i)[0]
-        np.random.shuffle(idxs)
-        train_labeled_idxs.extend(idxs[:n_labeled_per_class])
-        train_unlabeled_idxs.extend(idxs[n_labeled_per_class:-500])
-        val_idxs.extend(idxs[-500:])
-    np.random.shuffle(train_labeled_idxs)
-    np.random.shuffle(train_unlabeled_idxs)
-    np.random.shuffle(val_idxs)
-
-    return train_labeled_idxs, train_unlabeled_idxs, val_idxs
-
 class TransformTwice:
     def __init__(self, transform):
         self.transform = transform
@@ -106,6 +87,15 @@ class TransformTwice:
         out1 = self.transform(inp)
         out2 = self.transform(inp)
         return out1, out2
+
+class ImageTensorSetMixMatch(ImageTensorSet):
+    def __getitem__(self, index):
+        img, target = self.data[index], self.targets[index]
+        if self.transform is not None:
+            img = self.transform(img.numpy())
+    
+        return img, target
+
 
 def main():
     global best_acc
@@ -152,7 +142,7 @@ def main():
     print(f"Loaded {labels_sub.size(0)} labeled images")
 
     #images_sub = torch.clamp(images_sub * std + mean, 0., 1.)
-    train_labeled_set = ImageTensorSet([images_sub, labels_sub], transform=transform_train) # baseline
+    train_labeled_set = ImageTensorSetMixMatch([images_sub, labels_sub], transform=transform_train) # baseline
     #train_labeled_set = ImageTensorSet([images_sub, labels_sub]) # baseline
     if dataset_name == "CINIC10":
         train_unlabeled_set = datasets.__dict__[dataset_name](split="train", transform=TransformTwice(transform_train_unlabeled))
