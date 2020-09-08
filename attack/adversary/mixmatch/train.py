@@ -93,7 +93,7 @@ class ImageTensorSetMixMatch(ImageTensorSet):
         img, target = self.data[index], self.targets[index]
         if self.transform is not None:
             img = self.transform(img.numpy())
-    
+
         return img, target
 
 
@@ -200,7 +200,6 @@ def main():
         # Load checkpoint.
         print('==> Resuming from checkpoint..')
         assert os.path.isfile(args.resume), 'Error: no checkpoint directory found!'
-        #args.out = os.path.dirname(args.resume)
         checkpoint = torch.load(args.resume)
         best_acc = checkpoint['best_acc']
         print(f"Ckpt best acc: {best_acc}")
@@ -208,9 +207,6 @@ def main():
         model.load_state_dict(checkpoint['state_dict'])
         ema_model.load_state_dict(checkpoint['state_dict'])
 
-        #optimizer.load_state_dict(checkpoint['optimizer'])
-        #logger = Logger(os.path.join(args.out, 'log.txt'), title=title, resume=True)
-#    else:
     logger = Logger(os.path.join(args.out, 'log.txt'), title=title)
     logger.set_names(['Train Loss', 'Train Loss X', 'Train Loss U',  'Valid Loss', 'Valid Acc.', 'Test Loss', 'Test Acc.'])
 
