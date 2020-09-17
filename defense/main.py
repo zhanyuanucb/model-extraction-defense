@@ -142,7 +142,7 @@ def main():
         #encoder.fc = IdLayer(activation=activation)
         encoder = encoder.to(device)
         encoder.eval()
-        print(f"==> Loaded encoder: arch_name: {encoder_arch_name} \n margin: {encoder_margin} \n thresh: {thresh}")
+        print(f"==> Loaded encoder: \n arch_name: {encoder_arch_name} \n margin: {encoder_margin} \n thresh: {thresh}")
 
         blackbox = Detector(k, thresh, encoder, MEAN, STD, log_suffix=log_suffix, log_dir=log_dir)
         blackbox.init(blackbox_dir, device, time=created_on, output_type=output_type, T=T)
@@ -164,7 +164,7 @@ def main():
     delta_step = params["delta_step"]
     t_rand = params["t_rand"]
     adv_aug = params["adv_aug"]
-    print(f"Detector config:\n eps: {eps} \n steps: {steps} \n momentum: {momentum} \n t_rand: {t_rand} \n delta_step: {delta_step}")
+    print(f"Attacker config:\n eps: {eps} \n steps: {steps} \n momentum: {momentum} \n t_rand: {t_rand} \n adv_aug: {adv_aug} \n delta_step: {delta_step}")
 
     # set up query blinding
     blinders_dir = params["blinders_dir"]
@@ -191,10 +191,10 @@ def main():
         auto_encoder = None
 
     if adv_aug:
-        adversary = AdvDA(model, blackbox, MEAN, STD, device, blinders_fn=auto_encoder, eps=eps)
+        adversary = AdvDA(model, blackbox, MEAN, STD, device, blinders_fn=auto_encoder, eps=eps, log_dir=log_dir)
     else:
         adversary = MultiStepJDA(model, blackbox, MEAN, STD, device, blinders_fn=auto_encoder, t_rand=t_rand, 
-                                eps=eps, steps=steps, momentum=momentum, delta_step=delta_step) 
+                                eps=eps, steps=steps, momentum=momentum, delta_step=delta_step, log_dir=log_dir) 
 
     # ----------- Set up seedset
     #seedset_path = osp.join(params["seedset_dir"], 'seed.pt')
@@ -300,6 +300,14 @@ def main():
                                                   resume=resume, benchmark=best_test_acc)
         best_test_acc = max(test_acc, best_test_acc)
 
+    # Store arguments
+    params['budget'] = images_sub.size(0)
+    params['best_adv_acc'] = best_test_acc
+    params['num_detections'] = blackbox.alarm_count
+    params_out_path = osp.join(ckp_out_root, 'params_train.json')
+    with open(params_out_path, 'w') as jf:
+        json.dump(params, jf, indent=True)
+
     adjust_epochs = params["adjust_epochs"]
     if adjust_epochs > 0:
         print("=> Enter adjustment epochs...")
@@ -310,15 +318,13 @@ def main():
                                                   resume=resume, benchmark=best_test_acc)
         best_test_acc = max(test_acc, best_test_acc)
 
-    # Store arguments
-    params['budget'] = images_sub.size(0)
+    # Store arguments (update the best_adv_acc after the adjustment epochs)
     params['best_adv_acc'] = best_test_acc
-    params['num_detections'] = blackbox.alarm_count
     params_out_path = osp.join(ckp_out_root, 'params_train.json')
     with open(params_out_path, 'w') as jf:
         json.dump(params, jf, indent=True)
 
-    if params["params_search"]:
+    if params["params_search"]: # If doing parameter searching
         jid = params["jid"]
         search_log_path = f"./params_search_{jid}.log.tsv"
         if not osp.exists(search_log_path):

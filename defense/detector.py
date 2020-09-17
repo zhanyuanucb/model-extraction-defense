@@ -124,8 +124,6 @@ class Detector:
     def _write_log(self, detected_dist):
         with open(self.log_file, 'a') as log:
             columns = [str(self.query_count), f"{self.memory_size}/{self.memory_capacity}", str(self.detection_count // self.num_clusters), str(detected_dist)]
-        #else:
-        #    columns = [str(self.query_count), str(self.detection_count), str(detected_dist)]
             log.write('\t'.join(columns) + '\n')
     
     def __call__(self, images):
