@@ -8,6 +8,7 @@ import os
 import json
 import sys
 sys.path.append('/mydata/model-extraction/model-extraction-defense/')
+#sys.path.append('/mydata/model-extraction/knockoffnets')
 
 import numpy as np
 
@@ -39,6 +40,7 @@ class Blackbox(object):
         self.model.eval()
         self.output_type = output_type
         self.T = T
+        self.call_count = 0
 
     @classmethod
     def from_modeldir(cls, model_dir, device=None, output_type="one_hot", T=1):
@@ -61,6 +63,7 @@ class Blackbox(object):
         # Load weights
         checkpoint_path = osp.join(model_dir, 'checkpoint.pth.tar')
         print("=> loading checkpoint '{}'".format(checkpoint_path))
+        #import ipdb; ipdb.set_trace()
         checkpoint = torch.load(checkpoint_path)
         epoch = checkpoint['epoch']
         best_test_acc = checkpoint['best_acc']
@@ -71,7 +74,9 @@ class Blackbox(object):
         blackbox.device = device
         return blackbox
 
-    def __call__(self, images):
+    def __call__(self, images, is_adv=False):
+        if is_adv:
+            self.call_count += images.size(0)
         images = images.to(self.device)
         with torch.no_grad():
             logits = self.model(images)

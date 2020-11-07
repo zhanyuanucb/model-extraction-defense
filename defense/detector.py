@@ -29,7 +29,7 @@ class Detector:
                  num_clusters=50, buffer_size=1000, memory_capacity=10000,
                  log_suffix="", log_dir="./"):
         self.blackbox = None
-        self.query_count = 0
+        self.call_count = 0
         self.detection_count = 0
         self.alarm_count = 0
         self.K = k
@@ -70,7 +70,7 @@ class Detector:
         k = self.K
         if len(self.memory) == 0 and len(self.buffer) < k:
             self.buffer.append(query)
-            self.query_count += 1
+            self.call_count += 1
             return False
         
         all_dists = []
@@ -90,7 +90,7 @@ class Detector:
         #print(self.query_count, k_avg_dist)
 
         self.buffer.append(query)
-        self.query_count += 1
+        self.call_count += 1
 
         if len(self.buffer) >= self.buffer_size: # clean buffer
             self.memory.append(np.stack(self.buffer, axis=0))
@@ -123,7 +123,7 @@ class Detector:
 
     def _write_log(self, detected_dist):
         with open(self.log_file, 'a') as log:
-            columns = [str(self.query_count), f"{self.memory_size}/{self.memory_capacity}", str(self.detection_count // self.num_clusters), str(detected_dist)]
+            columns = [str(self.call_count), f"{self.memory_size}/{self.memory_capacity}", str(self.detection_count // self.num_clusters), str(detected_dist)]
             log.write('\t'.join(columns) + '\n')
     
     def __call__(self, images):
@@ -132,4 +132,4 @@ class Detector:
         is_adv = self._process(images)
         # ----------------------------
         output = self.blackbox(images)
-        return is_adv, output
+        return output

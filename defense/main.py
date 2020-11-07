@@ -29,6 +29,7 @@ __status__ = "Development"
 def main():
     parser = argparse.ArgumentParser(description='Simulate model extraction')
     parser.add_argument("--model_name", metavar="TYPE", type=str, default="resnet18")
+    parser.add_argument('--pretrained', metavar='STR', type=str, help='Assumption of F_A', default=None)
     parser.add_argument("--device_id", metavar="TYPE", type=int, default=1)
     parser.add_argument("--jid", metavar="TYPE", type=int, default=1)
     parser.add_argument("--num_classes", metavar="TYPE", type=int, default=10)
@@ -42,8 +43,9 @@ def main():
     parser.add_argument("--alt_t", metavar="TYPE", type=int, help="alternate period of step size sign", default=None)
     parser.add_argument("--epochs", metavar="TYPE", type=int, help="extraction training epochs", default=10)
     parser.add_argument("--momentum", metavar="TYPE", type=float, help="multi-step JDA momentum", default=0.7)
-    parser.add_argument("--t_rand", action="store_true")
+    parser.add_argument("--t_rand", metavar="TYPE", type=int, default=1)
     parser.add_argument("--adv_aug", action="store_true")
+    parser.add_argument("--budget", metavar="TYPE", type=int, default=50000)
     parser.add_argument("--exp_complexity", metavar="TYPE", type=str, default="linear")
     parser.add_argument("--blackbox_dir", metavar="PATH", type=str,
                         default="/mydata/model-extraction/model-extraction-defense/attack/victim/models/cifar10/wrn28_2")
@@ -151,7 +153,8 @@ def main():
 
     # ----------- Initialize adversary model
     model_name = params["model_name"]
-    model = zoo.get_net(model_name, modelfamily, num_classes=num_classes)
+    pretrained = params['pretrained']
+    model = zoo.get_net(model_name, modelfamily, pretrained, num_classes=num_classes)
 
     model = model.to(device)
 
@@ -164,6 +167,7 @@ def main():
     delta_step = params["delta_step"]
     t_rand = params["t_rand"]
     adv_aug = params["adv_aug"]
+    budget = params["budget"]
     print(f"Attacker config:\n eps: {eps} \n steps: {steps} \n momentum: {momentum} \n t_rand: {t_rand} \n adv_aug: {adv_aug} \n delta_step: {delta_step}")
 
     # set up query blinding
@@ -191,9 +195,9 @@ def main():
         auto_encoder = None
 
     if adv_aug:
-        adversary = AdvDA(model, blackbox, MEAN, STD, device, blinders_fn=auto_encoder, eps=eps, log_dir=log_dir)
+        adversary = AdvDA(model, blackbox, budget, MEAN, STD, device, blinders_fn=auto_encoder, eps=eps, log_dir=log_dir)
     else:
-        adversary = MultiStepJDA(model, blackbox, MEAN, STD, device, blinders_fn=auto_encoder, t_rand=t_rand, 
+        adversary = MultiStepJDA(model, blackbox, budget, MEAN, STD, device, blinders_fn=auto_encoder, t_rand=t_rand, 
                                 eps=eps, steps=steps, momentum=momentum, delta_step=delta_step, log_dir=log_dir) 
 
     # ----------- Set up seedset
@@ -277,23 +281,19 @@ def main():
                 print("Exponential expansion")
                 nxt_aug_set = ImageTensorSet([images_sub, labels_sub])
 
-            #if aug_samples:
-
-            #    aug_loader = DataLoader(nxt_aug_set, batch_size=batch_size, shuffle=False, num_workers=num_workers, 
-            #                        sampler=torch.utils.data.sampler.SubsetRandomSampler(val_subset_indices))
-
-            #else:
             aug_loader = DataLoader(nxt_aug_set, batch_size=batch_size, shuffle=True, num_workers=num_workers)
 
             torch.save([images_sub, labels_sub], substitute_out_path)
             substitute_samples = [torch.clamp(images_sub * std + mean, 0., 1.), labels_sub]
             substitute_set = ImageTensorSet(substitute_samples, transform=train_transform)
+            #substitute_samples = [images_sub, labels_sub]
+            #substitute_set = ImageTensorSet(substitute_samples)
 
             print('=> substitute set ({} samples) written to: {}'.format(substitute_samples[0].size(0), substitute_out_path))
 
         print(f"Substitute training epoch {p}")
         print(f"Current size of the substitute set {len(substitute_set)}")
-        test_acc, train_loader = model_utils.train_model(model, substitute_set, ckp_out_root, batch_size=batch_size, epochs=epochs, testset=testloader, criterion_train=criterion_train,
+        test_acc, train_loader, _ = model_utils.train_model(model, substitute_set, ckp_out_root, batch_size=batch_size, epochs=epochs, testset=testloader, criterion_train=criterion_train,
                                                   device=device, optimizer=optimizer,
                                                   #scheduler=torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=200,eta_min=0.001),
                                                   scheduler=torch.optim.lr_scheduler.StepLR(optimizer, 100),
@@ -311,7 +311,7 @@ def main():
     adjust_epochs = params["adjust_epochs"]
     if adjust_epochs > 0:
         print("=> Enter adjustment epochs...")
-        test_acc, train_loader = model_utils.train_model(model, substitute_set, ckp_out_root, batch_size=batch_size, epochs=adjust_epochs, testset=testloader, criterion_train=criterion_train,
+        test_acc, train_loader, _ = model_utils.train_model(model, substitute_set, ckp_out_root, batch_size=batch_size, epochs=adjust_epochs, testset=testloader, criterion_train=criterion_train,
                                                   device=device, optimizer=optimizer,
                                                   #scheduler=torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=200,eta_min=0.001),
                                                   scheduler=torch.optim.lr_scheduler.StepLR(optimizer, 100),

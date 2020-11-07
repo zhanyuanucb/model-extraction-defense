@@ -111,18 +111,21 @@ def main():
     lr = params['lr']
     momentum = params['momentum']
     optimizer = model_utils.get_optimizer(model.parameters(), optim_type, lr=lr, momentum=momentum)
-    params['optimizer'] = optimizer
-
-    # ----------- Train
-    out_path = params['out_path']
-    model_utils.train_model(model, trainset, testset=testset, device=device, **params)
 
     # Store arguments
-    params['optimizer'] = optim_type
+    out_path = params['out_path']
     params['created_on'] = str(datetime.now())
     params_out_path = osp.join(out_path, 'params.json')
     with open(params_out_path, 'w') as jf:
         json.dump(params, jf, indent=True)
+
+    params['optimizer'] = optimizer
+    #params['scheduler'] = torch.optim.lr_scheduler.StepLR(optimizer, 60)
+
+    params['scheduler'] = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=200,eta_min=0.001)
+    # ----------- Train
+    model_utils.train_model(model, trainset, testset=testset, device=device, **params)
+
 
 
 if __name__ == '__main__':

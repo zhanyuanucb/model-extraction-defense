@@ -60,7 +60,9 @@ def copy_weights_(src_state_dict, dst_state_dict):
     n_success, n_skipped, n_shape_mismatch = 0, 0, 0
 
     for i, (src_param_name, src_param) in enumerate(src_state_dict.items()):
-        if src_param_name in dst_state_dict:
+        if src_param_name in dst_state_dict or src_param_name[1:] in dst_state_dict:
+            if src_param_name[1:] in dst_state_dict:
+                src_param_name = src_param_name[1:]
             dst_param = dst_state_dict[src_param_name]
             if dst_param.data.shape == src_param.data.shape:
                 dst_param.data.copy_(src_param.data)

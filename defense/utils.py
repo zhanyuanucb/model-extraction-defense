@@ -11,16 +11,19 @@ class ImageTensorSet(Dataset):
     Data are saved as:
     List[data:torch.Tensor(), labels:torch.Tensor()]
     """
-    def __init__(self, samples, transform=None, dataset="CIFAR10"):
+    def __init__(self, samples, transform=None, dataset="cifar"):
         self.data, self.targets = samples
         self.transform = transform
-        self.mode = "RGB" if dataset != "MNIST" else "L"
+        self.mode = "RGB" if dataset != "mnist" else "L"
 
     def __getitem__(self, index):
         img, target = self.data[index], self.targets[index]
         if self.transform is not None:
             img *= 255
-            img = Image.fromarray(img.numpy().astype('uint8').transpose([1, 2, 0]), mode=self.mode)
+            img = img.numpy().astype('uint8')
+            if self.mode == "RGB":
+                img = img.transpose([1, 2, 0])
+            img = Image.fromarray(img, mode=self.mode)
             img = self.transform(img)
 
         return img, target

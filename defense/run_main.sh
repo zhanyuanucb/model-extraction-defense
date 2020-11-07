@@ -60,17 +60,25 @@ thresh=0.225
 #                                     --blinders_dir=/mydata/model-extraction/model-extraction-defense/attack/adversary/query_blinding/autoencoder_blind/phase2_cinic10_adv_rand_0_ \
 #                                     --device_id=0
 #                                    
-CUDA_VISIBLE_DEVICES=1 python main.py --model_name="wrn28_2" \
+CUDA_VISIBLE_DEVICES=0 python main.py --model_name="vgg16_bn" \
+                                       --seedset_dir="/mydata/model-extraction/data/cifar10_balanced_subset500" \
                                        --output_type="one_hot" \
-                                       --epochs=10 \
-                                       --adjust_epochs=200 \
-                                       --eps=0.01 \
+                                       --pretrained="/mydata/model-extraction/prediction-poisoning/defenses/adversary/pretrained/vgg16_bn/checkpoint.pth.tar" \
+                                       --blackbox_dir="/mydata/model-extraction/model-extraction-defense/attack/victim/models/cifar10/vgg16_bn" \
+                                       --random_adv \
+                                       --phi=1 \
+                                       --epochs=20 \
+                                       --t_rand=3 \
+                                       --steps=8 \
+                                       --momentum=0.7 \
+                                       --adjust_epochs=100 \
+                                       --eps=0.1 \
                                        --encoder_arch_name=$encoder_name \
                                        --encoder_suffix=$encoder_suffix \
                                        --encoder_margin=3.2 \
                                        --thresh=$thresh \
-                                       --log_suffix="new_standard"\
-                                       --device_id=1
+                                       --log_suffix="random_adv"\
+                                       --device_id=0
 
 #for blinder in get_uniform_noise get_gaussian_noise get_random_brightness get_random_rotate get_random_contrast get_random_translate get_random_scale get_random_crop
 #for blinder in get_random_contrast get_random_translate get_random_brightness

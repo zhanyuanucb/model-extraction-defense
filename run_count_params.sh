@@ -5,4 +5,6 @@
 #python count_model_params.py --model_name=resnet18 # 0.3M
 #python count_model_params.py --model_name=resnet34 # 0.5M
 #python count_model_params.py --model_name=resnet50 # 0.9M
-python count_model_params.py --model_name=wrn28_2 # 1.5M
+#python count_model_params.py --model_name=wrn28_2 # 1.5M
+python count_model_params.py --model_name=vgg16 # 1.5M
+python count_model_params.py --model_name=vgg16_bn # 1.5M

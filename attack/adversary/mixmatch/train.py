@@ -1,7 +1,12 @@
 from __future__ import print_function
 import sys
 sys.path.append('/mydata/model-extraction/model-extraction-defense/')
-import modelzoo.zoo as zoo
+sys.path.append('/mydata/model-extraction/prediction-poisoning/knockoffnets/')
+
+import pickle
+from PIL import Image
+import knockoff.models.zoo as zoo
+#import modelzoo.zoo as zoo
 from attack import datasets
 import attack.utils.model as model_utils
 from defense.utils import ImageTensorSet
@@ -18,6 +23,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.parallel
+from torch.utils.data import Dataset
 import torch.backends.cudnn as cudnn
 import torch.optim as optim
 import torch.utils.data as data
@@ -28,6 +34,33 @@ import torch.nn.functional as F
 import dataset.cifar10 as dataset
 from utils import Bar, Logger, AverageMeter, accuracy, mkdir_p, savefig
 from tensorboardX import SummaryWriter
+
+class TransferSetImages(Dataset):
+    def __init__(self, samples, transform=None, target_transform=None):
+        self.samples = samples
+        self.transform = transform
+        self.target_transform = target_transform
+
+        self.data = [self.samples[i][0] for i in range(len(self.samples))]
+        self.targets = [self.samples[i][1].argmax() for i in range(len(self.samples))]
+
+    def __getitem__(self, index):
+        img, target = self.data[index], self.targets[index]
+
+        # doing this so that it is consistent with all other datasets
+        # to return a PIL Image
+        img = Image.fromarray(img.astype('uint8'))
+
+        if self.transform is not None:
+            img = self.transform(img)
+
+        if self.target_transform is not None:
+            target = self.target_transform(target)
+
+        return img, target
+
+    def __len__(self):
+        return len(self.data)
 
 parser = argparse.ArgumentParser(description='PyTorch MixMatch Training')
 # Optimization options
@@ -60,6 +93,7 @@ parser.add_argument('--train-iteration', type=int, default=1024,
 parser.add_argument('--out', default='result',
                         help='Directory to output the result')
 parser.add_argument('--alpha', default=0.75, type=float)
+parser.add_argument('--arch_name', metavar='STR', type=str, help='Model arch of F_A', default="vgg16_bn")
 parser.add_argument('--lambda-u', default=75, type=float)
 parser.add_argument('--T', default=0.5, type=float)
 parser.add_argument('--ema-decay', default=0.999, type=float)
@@ -103,7 +137,6 @@ def main():
     if not os.path.isdir(args.out):
         mkdir_p(args.out)
 
-
     # Data
     print(f'==> Preparing cifar10')
     transform_train = transforms.Compose([
@@ -111,21 +144,6 @@ def main():
         dataset.RandomFlip(),
         dataset.ToTensor(),
     ])
-
-    transform_val = transforms.Compose([
-        dataset.ToTensor(),
-    ])
-
-    #train_labeled_set, train_unlabeled_set, val_set, test_set = dataset.get_cifar10(cfg.DATASET_ROOT+"/cifar10", args.n_labeled, transform_train=transform_train, transform_val=transform_val)
-   ##torch.save(train_labeled_set, "/mydata/model-extraction/train_labeled_set.pt")
-   ##exit(1)
-    #labeled_trainloader = data.DataLoader(train_labeled_set, batch_size=args.batch_size, shuffle=True, num_workers=0, drop_last=True)
-    #unlabeled_trainloader = data.DataLoader(train_unlabeled_set, batch_size=args.batch_size, shuffle=True, num_workers=0, drop_last=True)
-    #val_loader = data.DataLoader(val_set, batch_size=args.batch_size, shuffle=False, num_workers=0)
-    #test_loader = data.DataLoader(test_set, batch_size=args.batch_size, shuffle=False, num_workers=0)
-
-    # Data
-#    print(f'==> Preparing cifar10')
 
     dataset_name = args.dataset_name
     modelfamily = datasets.dataset_to_modelfamily[dataset_name]
@@ -137,13 +155,26 @@ def main():
     transform_val = datasets.modelfamily_to_transforms["cifar"]['test']
     transform_test = datasets.modelfamily_to_transforms["cinic10"]['test']
 
-    [images_sub, labels_sub] = torch.load(args.seed_dir) 
-    labels_sub = labels_sub.argmax(1)
-    print(f"Loaded {labels_sub.size(0)} labeled images")
-
-    #images_sub = torch.clamp(images_sub * std + mean, 0., 1.)
-    train_labeled_set = ImageTensorSetMixMatch([images_sub, labels_sub], transform=transform_train) # baseline
-    #train_labeled_set = ImageTensorSet([images_sub, labels_sub]) # baseline
+    ##################################################################
+    # Need to handel 3 sources of labeled data for training:
+    # 1. My implementation of JDA
+    # 2. KnockoffNets 
+    # 3. Official implementation of JDA
+    ##################################################################
+    try:
+        # My implementation
+        [images_sub, labels_sub] = torch.load(args.seed_dir) 
+        labels_sub = labels_sub.argmax(1)
+        train_labeled_set = ImageTensorSetMixMatch([images_sub, labels_sub], transform=transform_train) # baseline
+    except RuntimeError as e:
+        with open(args.seed_dir, 'rb') as rf:
+            transferset_samples = pickle.load(rf)
+        if isinstance(transferset_samples, list): # Knockoff transferset
+            train_labeled_set = TransferSetImages(transferset_samples, transform=transform_train_labeled)
+        else: # Jacobian transferset
+            train_labeled_set = transferset_samples
+            train_labeled_set.targets = train_labeled_set.targets.argmax(-1)
+    
     if dataset_name == "CINIC10":
         train_unlabeled_set = datasets.__dict__[dataset_name](split="train", transform=TransformTwice(transform_train_unlabeled))
     else:
@@ -154,9 +185,9 @@ def main():
     # Split labeled/unlabeled dataset
     
     labeled_trainloader = data.DataLoader(train_labeled_set, batch_size=args.batch_size, shuffle=True, 
-                                          num_workers=0, drop_last=True)
+                                          num_workers=10, drop_last=True)
     unlabeled_trainloader = data.DataLoader(train_unlabeled_set, batch_size=args.batch_size, 
-                                          shuffle=True, num_workers=0, drop_last=True)
+                                          shuffle=True, num_workers=10, drop_last=True)
     val_loader = data.DataLoader(val_set, batch_size=args.batch_size, shuffle=False, num_workers=0)
     if test_set:
         n_sample = 10000
@@ -169,9 +200,10 @@ def main():
         test_loader = None
 
     # Model
-    print("==> creating WRN-28-2")
+    arch_name = args.arch_name
+    print(f"==> creating {arch_name}")
 
-    def create_model(arch_name="wrn28_2", modelfamily="cifar", num_classes=10, ema=False):
+    def create_model(arch_name="vgg16_bn", modelfamily="cifar", num_classes=10, ema=False):
         model = zoo.get_net(arch_name, modelfamily, num_classes=num_classes)
         model = model.cuda()
 
@@ -181,8 +213,8 @@ def main():
 
         return model
 
-    model = create_model()
-    ema_model = create_model(ema=True)
+    model = create_model(arch_name=arch_name)
+    ema_model = create_model(arch_name=arch_name, ema=True)
 
     cudnn.benchmark = True
     print('    Total params: %.2fM' % (sum(p.numel() for p in model.parameters())/1000000.0))
@@ -405,7 +437,6 @@ def validate(valloader, model, criterion, epoch, use_cuda, mode):
                 inputs, targets = inputs.cuda(), targets.cuda(non_blocking=True)
             # compute output
             outputs = model(inputs)
-            #loss = criterion(outputs, targets)
             loss = criterion(outputs, targets)
 
             # measure accuracy and record loss
