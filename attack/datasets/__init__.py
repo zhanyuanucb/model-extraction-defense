@@ -1,4 +1,6 @@
 from torchvision import transforms
+from torch import nn
+import kornia.augmentation as kaug
 
 #from knockoff.datasets.caltech256 import Caltech256
 from attack.datasets.cifarlike import CIFAR10, CIFAR100, SVHN
@@ -83,7 +85,17 @@ modelfamily_to_transforms = {
                                      ]),
             transforms.ToTensor()
         ]),
-        'test2': transforms.ToTensor()
+
+        'test2': transforms.ToTensor(),
+
+        'train_kornia': nn.Sequential(kaug.RandomHorizontalFlip(p=0.5),
+                                      kaug.RandomResizedCrop((32, 32)),
+                                      kaug.RandomRotation(degrees=60),
+                                      kaug.ColorJitter(brightness=0.5),
+                                      kaug.ColorJitter(brightness=0.55)
+                                      ),
+
+        'test_kornia': lambda x: x
     },
 
     'imagenet': {

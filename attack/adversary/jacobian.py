@@ -4,7 +4,7 @@ Replace this with a more detailed description of what this file contains.
 """
 import sys
 sys.path.append('/mydata/model-extraction/model-extraction-defense/')
-from defense.utils import ImageTensorSet
+from defense.utils import ImageTensorSet, ImageTensorSetKornia
 import argparse
 import os.path as osp
 import os
@@ -23,6 +23,10 @@ import torch.nn.functional as F
 import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader, TensorDataset, Subset
 import torchvision
+
+import foolbox
+from foolbox.attacks import LinfPGD as PGD
+from foolbox.criteria import Misclassification, TargetedMisclassification
 
 from attack import datasets
 import attack.utils.transforms as transform_utils
@@ -48,8 +52,8 @@ class JacobianAdversary:
     2. (JB-{topk, self}) "PRADA: Protecting against DNN Model Stealing Attacks", Juuti et al., Euro S&P '19
     """
     def __init__(self, blackbox, budget, model_adv_name, model_adv_pretrained, modelfamily, seedset, testset, device,
-                 out_dir, batch_size=cfg.DEFAULT_BATCH_SIZE, 
-                 eps=0.1, num_steps=8, train_epochs=20, kappa=400, tau=None, rho=6, sigma=-1,
+                 out_dir, batch_size=cfg.DEFAULT_BATCH_SIZE, ema_decay=-1, 
+                 eps=0.1, num_steps=8, train_epochs=20, kappa=400, tau=None, rho=6, sigma=-1, take_lastk=-1,
                  query_batch_size=1, random_adv=False, adv_transform=False, aug_strategy='jbda', useprobs=True, final_train_epochs=100):
         self.blackbox = blackbox
         self.budget = budget
@@ -61,6 +65,7 @@ class JacobianAdversary:
         self.testset = testset
         self.batch_size = batch_size
         self.query_batch_size = query_batch_size
+        self.ema_decay = ema_decay
         self.testloader = DataLoader(self.testset, batch_size=self.batch_size, pin_memory=True)
         self.train_epochs = train_epochs
         self.final_train_epochs = final_train_epochs
@@ -70,6 +75,7 @@ class JacobianAdversary:
         self.tau = tau
         self.rho = rho
         self.sigma = sigma
+        self.take_lastk = take_lastk
         self.device = device
         self.MEAN, self.STD = cfg.NORMAL_PARAMS[modelfamily]
         self.MEAN, self.STD = torch.Tensor(self.MEAN), torch.Tensor(self.STD)
@@ -80,12 +86,14 @@ class JacobianAdversary:
         self.out_dir = out_dir
         self.num_classes = len(self.testset.classes)
         self.random_adv = random_adv
-        assert (aug_strategy in ['jbda', 'jbself']) or 'jbtop' in aug_strategy
+        assert (aug_strategy in ['jbda', 'jbself']) or 'jbtop' in aug_strategy or 'foolbox_adv' in aug_strategy
         self.aug_strategy = aug_strategy
         self.topk = 0
         if 'jbtop' in aug_strategy:
             # extract k from "jbtop<k>"
             self.topk = int(aug_strategy.replace('jbtop', ''))
+        if 'foolbox_adv' in aug_strategy:
+            self.topk = int(aug_strategy.replace('foolbox_adv', ''))
 
         self.accuracies = []  # Track test accuracies over time
         self.useprobs = useprobs
@@ -125,7 +133,7 @@ class JacobianAdversary:
         model_adv = model_adv.to(self.device)
         _, _, model_adv = model_utils.train_model(model_adv, self.D, self.out_dir, num_workers=10,
                                             checkpoint_suffix='.{}'.format(self.blackbox.call_count),
-                                            device=self.device, epochs=1,
+                                            device=self.device, epochs=1, ema_decay=self.ema_decay,
                                             log_interval=500, lr=0.01, momentum=0.9, batch_size=self.batch_size,
                                             lr_gamma=0.1, testset=self.testset,
                                             criterion_train=model_utils.soft_cross_entropy)
@@ -167,8 +175,13 @@ class JacobianAdversary:
             print(tabel)
             log.write(tabel)
 
+    def normalize(self, images):
+        mean, std = self.MEAN.to(images.device), self.STD.to(images.device)
+        return (images-mean) / std
+
     def denormalize(self, images):
-        return torch.clamp(images*self.STD + self.MEAN, 0., 1.)   
+        mean, std = self.MEAN.to(images.device), self.STD.to(images.device)
+        return torch.clamp(images*std + mean, 0., 1.)   
 
     def get_transferset(self):
         """
@@ -176,20 +189,42 @@ class JacobianAdversary:
         """
         # for rho_current in range(self.rho):
         rho_current = 0
+        model_adv = None
         if not self.random_adv:
             while self.blackbox.call_count < self.budget:
                 print('=> Beginning substitute epoch {} (|D| = {})'.format(rho_current, len(self.D)))
                 # -------------------------- 0. Initialize Model
                 model_adv = zoo.get_net(self.model_adv_name, self.modelfamily, self.model_adv_pretrained,
                                         num_classes=self.num_classes)
+                #model_adv = zoo.get_net(self.model_adv_name, self.modelfamily, 
+                #"/mydata/model-extraction/model-extraction-defense/attack/victim/models/cifar10/vgg16_bn/checkpoint.pth.tar",
+                #                        num_classes=self.num_classes)
+
                 model_adv = model_adv.to(self.device)
 
                 # -------------------------- 1. Train model on D
+                #model_utils.test_step(model_adv, 
+                #          DataLoader(self.testset, batch_size=128, shuffle=False, num_workers=10),
+                #          nn.CrossEntropyLoss(reduction='mean'), device=self.device, epoch=0)
+                
+                ################################################
+                # Enable data augmentation
+                ################################################
+                #Dx, Dy = self.D.tensors                                      
+                #transform = None
+                #if self.adv_transform:
+                #    Dx = self.denormalize(Dx)
+                #    #transform = datasets.modelfamily_to_transforms[self.modelfamily]["train_kornia"]
+                #    transform = datasets.modelfamily_to_transforms[self.modelfamily]["train"]
+                ##self.D = ImageTensorSetKornia((Dx, Dy), transform=transform)
+                #self.D = ImageTensorSet((Dx, Dy), transform=transform)
                 _, _, model_adv = model_utils.train_model(model_adv, self.D, self.out_dir, num_workers=10,
-                                                    checkpoint_suffix='.{}'.format(self.blackbox.call_count),
+                                                    checkpoint_suffix='.{}'.format(self.blackbox.call_count), ema_decay=self.ema_decay,
                                                     device=self.device, epochs=self.train_epochs, log_interval=500, lr=0.01,
                                                     momentum=0.9, batch_size=self.batch_size, lr_gamma=0.1,
                                                     testset=self.testset, criterion_train=model_utils.soft_cross_entropy)
+                #Dx, Dy = self.D.data, self.D.targets
+                #self.D = TensorDataset(Dx, Dy)
 
                 # -------------------------- 2. Evaluate model
                 # _, acc = model_utils.test_step(model_adv, self.testloader, nn.CrossEntropyLoss(reduction='mean'),
@@ -200,7 +235,11 @@ class JacobianAdversary:
                 if self.aug_strategy in ['jbda', 'jbself']:
                     self.D = self.jacobian_augmentation(model_adv, rho_current, step_size=self.eps, num_steps=self.num_steps)
                 elif self.aug_strategy == 'jbtop{}'.format(self.topk):
-                    self.D = self.jacobian_augmentation_topk(model_adv, rho_current, step_size=self.eps, num_steps=self.num_steps)
+                    self.D = self.jacobian_augmentation_topk(model_adv, rho_current, step_size=self.eps, num_steps=self.num_steps,
+                                                             take_lastk=self.take_lastk, use_foolbox=False)
+                elif self.aug_strategy == 'foolbox_adv{}'.format(self.topk):
+                    self.D = self.jacobian_augmentation_topk(model_adv, rho_current, step_size=self.eps, num_steps=self.num_steps,
+                                                             take_lastk=self.take_lastk, use_foolbox=True)
                 else:
                     raise ValueError('Unrecognized augmentation strategy: "{}"'.format(self.aug_strategy))
 
@@ -217,16 +256,17 @@ class JacobianAdversary:
                     # Enable data augmentation
                     ################################################
                     Dx, Dy = self.D.tensors                                      
-                    transform = datasets.modelfamily_to_transforms[self.modelfamily]["train"]
                     transform = None
                     if self.adv_transform:
                         Dx = self.denormalize(Dx)
                         transform = datasets.modelfamily_to_transforms[self.modelfamily]["train"]
+                        #transform = datasets.modelfamily_to_transforms[self.modelfamily]["train_kornia"]
+                    #self.D = ImageTensorSetKornia((Dx, Dy), transform=transform)
                     self.D = ImageTensorSet((Dx, Dy), transform=transform)
 
                     _, _, model_adv = model_utils.train_model(model_adv, self.D, self.out_dir, num_workers=10,
                                                         checkpoint_suffix='.{}'.format(self.blackbox.call_count),
-                                                        device=self.device, epochs=self.final_train_epochs,
+                                                        device=self.device, epochs=self.final_train_epochs, ema_decay=self.ema_decay,
                                                         log_interval=500, lr=0.01, momentum=0.9, batch_size=self.batch_size,
                                                         lr_gamma=0.1, testset=self.testset,
                                                         criterion_train=model_utils.soft_cross_entropy)
@@ -271,6 +311,12 @@ class JacobianAdversary:
         mask = np.zeros_like(idxs).astype(bool)
         mask[sampled_idxs] = True
         D_sampled = TensorDataset(D.tensors[0][mask], D.tensors[1][mask])
+        return D_sampled
+
+    @staticmethod
+    def sample_lastk(D, lastk):
+        n = len(D)
+        D_sampled = TensorDataset(D.tensors[0][:lastk], D.tensors[1][:lastk])
         return D_sampled
 
     def jacobian_augmentation(self, model_adv, rho_current, step_size=0.1, num_steps=8):
@@ -333,9 +379,11 @@ class JacobianAdversary:
 
         return D_augmented
 
-    def jacobian_augmentation_topk(self, model_adv, rho_current, step_size=0.1, num_steps=8):
+    def jacobian_augmentation_topk(self, model_adv, rho_current, step_size=0.1, num_steps=8, take_lastk=-1, use_foolbox=False):
         if (self.kappa is not None) and (rho_current >= self.sigma):
             D_sampled = self.rand_sample(self.D, self.kappa)
+        elif take_lastk > 0:
+            D_sampled = self.sample_lastk(self.D, take_lastk)
         else:
             D_sampled = self.D
 
@@ -345,17 +393,26 @@ class JacobianAdversary:
             nqueries_remaining /= 3.
             nqueries_remaining = int(np.ceil(nqueries_remaining))
             assert nqueries_remaining >= 0
-            print('=> Reducing augmented input size ({}*{} -> {}*{}={}) to stay within query budget.'.format(
-                D_sampled.tensors[0].shape[0], self.topk, nqueries_remaining, self.topk,
-                nqueries_remaining * self.topk))
-            D_sampled = TensorDataset(D_sampled.tensors[0][:nqueries_remaining],
-                                      D_sampled.tensors[1][:nqueries_remaining])
+
+            try:
+                print('=> Reducing augmented input tensors[1]size ({}*{} -> {}*{}={}) to stay within query budget.'.format(
+                    D_sampled.tensors[0].shape[0], self.topk, nqueries_remaining, self.topk,
+                    nqueries_remaining * self.topk))
+                D_sampled = TensorDataset(D_sampled.tensors[0][:nqueries_remaining],
+                                          D_sampled.tensors[1][:nqueries_remaining])
+            except AttributeError as e:
+                print('=> Reducing augmented input tensors[1]size ({}*{} -> {}*{}={}) to stay within query budget.'.format(
+                    D_sampled.data.shape[0], self.topk, nqueries_remaining, self.topk,
+                    nqueries_remaining * self.topk))
+                D_sampled = TensorDataset(D_sampled.data[:nqueries_remaining],
+                                          D_sampled.targets[:nqueries_remaining])
 
         if self.tau is not None:
             step_size = step_size * ((-1) ** (round(rho_current / self.tau)))
 
         print('=> Augmentation set size = {} (|D| = {}, B = {})'.format(len(D_sampled), len(self.D),
                                                                         self.blackbox.call_count))
+
         loader = DataLoader(D_sampled, batch_size=1, shuffle=False)
         X_aug = []
         Y_aug = []
@@ -382,8 +439,13 @@ class JacobianAdversary:
             Y_pred_sorted = Y_pred_sorted[Y_pred_sorted != Y[0].argmax()]  # Remove gt class
 
             for c in Y_pred_sorted[:self.topk]:
-                delta_i = self.pgd_linf_targ(model_adv, X, Y.argmax(dim=1), c, epsilon=step_size, alpha=0.01,
+                if use_foolbox:
+                    delta_i = self.foolbox_linf_targ(model_adv, X, Y.argmax(dim=1), c, epsilon=step_size, alpha=0.01,
+                                                 device=self.device)
+                else:
+                    delta_i = self.pgd_linf_targ(model_adv, X, Y.argmax(dim=1), c, epsilon=step_size, alpha=0.01,
                                              device=self.device)
+
 
                 x_aug = X + delta_i
                 Y_adv = model_adv(x_aug)
@@ -424,8 +486,13 @@ class JacobianAdversary:
         X_aug = torch.cat(X_aug, dim=0)
         Y_aug = torch.cat(Y_aug, dim=0)
 
-        Dx_augmented = torch.cat([self.D.tensors[0], X_aug])[:self.budget]
-        Dy_augmented = torch.cat([self.D.tensors[1], Y_aug])[:self.budget]
+        try: 
+            Dx_augmented = torch.cat([self.D.tensors[0], X_aug])[:self.budget]
+            Dy_augmented = torch.cat([self.D.tensors[1], Y_aug])[:self.budget]
+        except AttributeError as e:
+            Dx_augmented = torch.cat([self.D.data, X_aug])[:self.budget]
+            Dy_augmented = torch.cat([self.D.targets, Y_aug])[:self.budget]
+
         D_augmented = TensorDataset(Dx_augmented, Dy_augmented)
 
         #------------------------- Logging
@@ -495,6 +562,17 @@ class JacobianAdversary:
                 loss.backward()
                 delta.data = (delta + alpha * delta.grad.detach().sign()).clamp(-epsilon, epsilon)
                 delta.grad.zero_()
-#            if delta.abs().sum().item() == 0:
-#                import ipdb; ipdb.set_trace()
             return delta.detach()
+
+    def foolbox_linf_targ(self, model, inputs, targets, y_targ, epsilon, alpha, device, num_iter=8):
+        attack = PGD(abs_stepsize=2*epsilon/num_iter)
+        inputs = inputs.to(device)
+
+        images = self.denormalize(inputs)
+        adv_criterion = TargetedMisclassification(y_targ[None])
+        fmodel = foolbox.models.PyTorchModel(model, bounds=(0, 1), preprocessing={"mean":self.MEAN.to(device), "std":self.STD.to(device)})
+        _, images, is_adv = attack(fmodel, images, criterion=adv_criterion, epsilons=8./256)
+        images = self.normalize(images)
+
+        delta = images - inputs
+        return delta

@@ -5,8 +5,8 @@ sys.path.append('/mydata/model-extraction/prediction-poisoning/knockoffnets/')
 
 import pickle
 from PIL import Image
-import knockoff.models.zoo as zoo
-#import modelzoo.zoo as zoo
+#import knockoff.models.zoo as zoo
+import modelzoo.zoo as zoo
 from attack import datasets
 import attack.utils.model as model_utils
 from defense.utils import ImageTensorSet
@@ -174,6 +174,9 @@ def main():
         else: # Jacobian transferset
             train_labeled_set = transferset_samples
             train_labeled_set.targets = train_labeled_set.targets.argmax(-1)
+    except ValueError as e:
+        train_labeled_set = torch.load(args.seed_dir)
+        train_labeled_set.targets = train_labeled_set.targets.argmax(-1)
     
     if dataset_name == "CINIC10":
         train_unlabeled_set = datasets.__dict__[dataset_name](split="train", transform=TransformTwice(transform_train_unlabeled))
@@ -190,12 +193,14 @@ def main():
                                           shuffle=True, num_workers=10, drop_last=True)
     val_loader = data.DataLoader(val_set, batch_size=args.batch_size, shuffle=False, num_workers=0)
     if test_set:
-        n_sample = 10000
+        n_sample = 1000
         total_test = len(test_set)
         sample_idx = np.random.choice(range(total_test), n_sample, replace=False)
+        sampler = torch.utils.data.Sampler(sample_idx)
         print(f"Total {total_test} test samples, sample out {n_sample}")
-        test_loader = data.DataLoader(test_set, batch_size=args.batch_size, shuffle=False, num_workers=0,
-                                      sampler=sample_idx)
+        sub_test = data.Subset(test_set, indices = sample_idx)
+        test_loader = data.DataLoader(sub_test, batch_size=args.batch_size, shuffle=False, num_workers=0)
+
     else:
         test_loader = None
 

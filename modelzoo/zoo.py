@@ -36,7 +36,7 @@ def get_pretrainednet(modelname, modeltype, pretrained='imagenet', num_classes=1
     elif osp.exists(pretrained):
         model = eval('modelzoo.{}.{}'.format(modeltype, modelname))(num_classes=num_classes, **kwargs)
         checkpoint = torch.load(pretrained)
-        pretrained_state_dict = checkpoint.get('state_dict', checkpoint)
+        pretrained_state_dict = checkpoint.get('ema_state_dict', checkpoint.get("state_dict"))
         copy_weights_(pretrained_state_dict, model.state_dict())
         return model
     else:

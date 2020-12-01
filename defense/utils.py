@@ -31,6 +31,28 @@ class ImageTensorSet(Dataset):
     def __len__(self):
         return len(self.data)
 
+class ImageTensorSetKornia(Dataset):
+    """
+    Data are saved as:
+    List[data:torch.Tensor(), labels:torch.Tensor()]
+    """
+    def __init__(self, samples, transform=None, dataset="cifar"):
+        self.data, self.targets = samples
+        self.transform = transform
+        self.mode = "RGB" if dataset != "mnist" else "L"
+
+    def __getitem__(self, index):
+        img, target = self.data[index][None], self.targets[index]
+
+        if self.transform is not None:
+            img = self.transform(img)[0]
+
+        return img, target
+
+    def __len__(self):
+        return len(self.data)
+
+
 class PositiveNegativeSet(VisionDataset):
     """
     For data in form of serialized tensor

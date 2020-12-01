@@ -21,7 +21,7 @@ def main():
     parser = argparse.ArgumentParser(description='Simulate model extraction')
     # -------------------- Adversary
     parser.add_argument('--testset_name', metavar='STR', type=str, help='Testset', default="CIFAR10")
-    parser.add_argument("--eps", metavar="TYPE", type=float, default=8/255)
+    parser.add_argument("--eps", metavar="TYPE", type=float, default=8./256)
     parser.add_argument('--targeted', action='store_true', help='Whether is targeted attack', default=False)
 
     # Adv model
@@ -143,6 +143,7 @@ def main():
             adv_criterion = Misclassification(labels)
         images = denormalize(images)
         fmodel = foolbox.models.PyTorchModel(adversary_model, bounds=(0, 1), preprocessing={"mean":MEAN, "std":STD})
+        #fmodel = foolbox.models.PyTorchModel(adversary_model, bounds=(images.min(), images.max()))
         _, images, is_adv = attack(fmodel, images, criterion=adv_criterion, epsilons=eps)
         images = normalize(images)
 

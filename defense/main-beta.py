@@ -39,6 +39,7 @@ def main():
     parser.add_argument('--pretrained', metavar='STR', type=str, help='Assumption of F_A', default=None)
     parser.add_argument('--batch_size', metavar='TYPE', type=int, help='Batch size of queries',
                         default=cfg.DEFAULT_BATCH_SIZE)
+    parser.add_argument("--ema_decay", metavar="TYPE", type=float, default=-1.)
     parser.add_argument('--budget', metavar='N', type=int, help='Query limit to blackbox', default=35000)
     parser.add_argument('--queryset', metavar='TYPE', type=str, help='Data for seed images', required=True, default="CIFAR10")
     parser.add_argument('--seedsize', metavar='N', type=int, help='Size of seed set', default=500)
@@ -51,6 +52,7 @@ def main():
     parser.add_argument('--rho', metavar='N', type=int, help='# Data Augmentation Steps', default=None)
     parser.add_argument('--sigma', metavar='N', type=int, help='Reservoir sampling beyond these many epochs', default=3)
     parser.add_argument('--kappa', metavar='N', type=int, help='Size of reservoir', default=None)
+    parser.add_argument('--take_lastk', metavar='N', type=int, help='Size of reservoir', default=-1)
     parser.add_argument('--tau', metavar='N', type=int,
                         help='Iteration period after which step size is multiplied by -1', default=5)
     parser.add_argument('--train_epochs', metavar='N', type=int, help='# Epochs to train model', default=20)
@@ -212,14 +214,16 @@ def main():
     kappa = params['kappa']
     tau = params['tau']
     rho = params['rho']
+    take_lastk = params['take_lastk']
     sigma = params['sigma']
     policy = params['policy']
+    ema_decay = params['ema_decay']
 
     random_adv = True if params['random_adv'] else False
     adv_transform = True if params['adv_transform'] else False
     adversary = JacobianAdversary(blackbox, budget, model_adv_name, model_adv_pretrained, modelfamily, seedset,
-                                  testset, device, ckp_out_root, batch_size=batch_size,
-                                  eps=eps, num_steps=num_steps, train_epochs=train_epochs, kappa=kappa, tau=tau, rho=rho,
+                                  testset, device, ckp_out_root, batch_size=batch_size, ema_decay=ema_decay,
+                                  eps=eps, num_steps=num_steps, train_epochs=train_epochs, kappa=kappa, tau=tau, rho=rho, take_lastk=take_lastk,
                                   sigma=sigma, random_adv=random_adv, adv_transform=adv_transform, aug_strategy=policy)
 
 
@@ -227,7 +231,7 @@ def main():
     transferset, model_adv = adversary.get_transferset()
     #import ipdb; ipdb.set_trace()
     #These can be massive (>30G) -- skip it for now
-    transfer_out_path = osp.join(ckp_out_root, 'transferset.pickle')
+    transfer_out_path = osp.join(ckp_out_root, 'transferset.pt')
 
     torch.save(transferset, transfer_out_path)
     print('=> transfer set ({} samples) written to: {}'.format(len(transferset), transfer_out_path))

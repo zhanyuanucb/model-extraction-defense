@@ -83,7 +83,28 @@ def get_optimizer(parameters, optimizer_type, lr=0.01, momentum=0.9, **kwargs):
         raise ValueError('Unrecognized optimizer type')
     return optimizer
 
-def train_step(model, train_loader, criterion, optimizer, epoch, device, scheduler, log_interval=10):
+class WeightEMA(object):
+    def __init__(self, model, ema_model, lr, alpha=0.999):
+        self.model = model
+        self.ema_model = ema_model
+        self.alpha = alpha
+        self.params = list(model.state_dict().values())
+        self.ema_params = list(ema_model.state_dict().values())
+        self.wd = 0.02 * lr
+
+        for param, ema_param in zip(self.params, self.ema_params):
+            param.data.copy_(ema_param.data)
+
+    def step(self):
+        one_minus_alpha = 1.0 - self.alpha
+        for param, ema_param in zip(self.params, self.ema_params):
+            if ema_param.dtype==torch.float32:
+                ema_param.mul_(self.alpha)
+                ema_param.add_(param * one_minus_alpha)
+                # customized weight decay
+                param.mul_(1 - self.wd)
+
+def train_step(model, train_loader, criterion, optimizer, epoch, device, scheduler, log_interval=10, ema_optimizer=None):
     model.train()
     train_loss = 0.
     correct = 0
@@ -99,6 +120,8 @@ def train_step(model, train_loader, criterion, optimizer, epoch, device, schedul
         loss = criterion(outputs, targets)
         loss.backward()
         optimizer.step()
+        if ema_optimizer:
+            ema_optimizer.step()
         scheduler.step(epoch)
 
         train_loss += loss.item()
@@ -164,7 +187,7 @@ def test_step(model, test_loader, criterion, device, epoch=0., silent=False):
 def train_model(model, trainset, out_path, batch_size=64, criterion_train=None, criterion_test=None, testset=None,
                 device=None, num_workers=10, lr=0.1, momentum=0.5, lr_step=30, lr_gamma=0.1, resume=None,
                 epochs=100, log_interval=100, weighted_loss=False, checkpoint_suffix='', optimizer=None, scheduler=None,
-                callback=None, benchmark=None,
+                callback=None, benchmark=None, ema_decay=-1,
                 **kwargs):
     if device is None:
         device = torch.device('cuda')
@@ -221,6 +244,12 @@ def train_model(model, trainset, out_path, batch_size=64, criterion_train=None, 
             print("=> loaded checkpoint '{}' (epoch {})".format(resume, checkpoint['epoch']))
         else:
             print("=> no checkpoint found at '{}'".format(model_path))
+    
+    ema_optimizer = None
+    if ema_decay > 0:
+        import copy
+        ema_model = copy.deepcopy(model)
+        ema_optimizer= WeightEMA(model, ema_model, alpha=ema_decay)
 
     # Initialize logging
     log_path = osp.join(out_path, 'train{}.log.tsv'.format(checkpoint_suffix))
@@ -234,7 +263,7 @@ def train_model(model, trainset, out_path, batch_size=64, criterion_train=None, 
     for epoch in range(start_epoch, epochs + 1):
         #scheduler.step(epoch) # should call optimizer.step() before scheduler.stop(epoch)
         train_loss, train_acc = train_step(model, train_loader, criterion_train, optimizer, epoch, device,
-                                           scheduler, log_interval=log_interval)
+                                           scheduler, log_interval=log_interval, ema_optimizer=ema_optimizer)
         best_train_acc = max(best_train_acc, train_acc)
 
         if test_loader is not None:
@@ -243,13 +272,17 @@ def train_model(model, trainset, out_path, batch_size=64, criterion_train=None, 
             best_test_acc = max(best_test_acc, test_acc)
 
         # Checkpoint
+        if ema_decay > 0:
+            out_model = ema_model
+        else:
+            out_model = model
         if test_acc >= best_test_acc:
             if benchmark: # If set a banchmark, then only save ckpt if better than the benchmark
                 if best_test_acc >= benchmark:
                     state = {
                         'epoch': epoch,
-                        'arch': model.__class__,
-                        'state_dict': model.state_dict(),
+                        'arch': out_model.__class__,
+                        'state_dict': out_model.state_dict(),
                         'best_acc': test_acc,
                         'optimizer': optimizer.state_dict(),
                         'created_on': str(datetime.now()),
@@ -258,8 +291,8 @@ def train_model(model, trainset, out_path, batch_size=64, criterion_train=None, 
             else:
                 state = {
                     'epoch': epoch,
-                    'arch': model.__class__,
-                    'state_dict': model.state_dict(),
+                    'arch': out_model.__class__,
+                    'state_dict': out_model.state_dict(),
                     'best_acc': test_acc,
                     'optimizer': optimizer.state_dict(),
                     'created_on': str(datetime.now()),
@@ -277,6 +310,6 @@ def train_model(model, trainset, out_path, batch_size=64, criterion_train=None, 
         if callback and test_acc >= callback:
             with open(log_path, 'a') as af:
                 af.write(f'Validation accuracy reaches {callback}, so stop training.\n')
-            return model, train_loader
+            return out_model, train_loader
 
-    return best_test_acc, train_loader, model
+    return best_test_acc, train_loader, out_model
