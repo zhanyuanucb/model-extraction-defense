@@ -196,7 +196,7 @@ def train_model(model, trainset, out_path, batch_size=64, criterion_train=None, 
     run_id = str(datetime.now())
 
     # Data loaders
-    train_loader = DataLoader(trainset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
+    train_loader = DataLoader(trainset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
     if testset is not None:
         test_loader = DataLoader(testset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
     else:
@@ -262,6 +262,14 @@ def train_model(model, trainset, out_path, batch_size=64, criterion_train=None, 
     model_out_path = osp.join(out_path, 'checkpoint{}.pth.tar'.format(checkpoint_suffix))
     for epoch in range(start_epoch, epochs + 1):
         #scheduler.step(epoch) # should call optimizer.step() before scheduler.stop(epoch)
+#        if epoch == 1:
+#            print("Before training:")
+#            print("Acc. on training set")
+#            test_step(model, train_loader, criterion_test, device, epoch=epoch)
+#            if test_loader is not None:
+#                print("Acc. on test set")
+#                test_loss, test_acc = test_step(model, test_loader, criterion_test, device, epoch=epoch)
+
         train_loss, train_acc = train_step(model, train_loader, criterion_train, optimizer, epoch, device,
                                            scheduler, log_interval=log_interval, ema_optimizer=ema_optimizer)
         best_train_acc = max(best_train_acc, train_acc)

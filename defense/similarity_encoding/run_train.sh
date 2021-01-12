@@ -26,12 +26,13 @@
 #                --margin=$margin \
 #                -d 0              
                 
-model_name="simnet"
+model_name="vgg16_bn"
 margin=10
-model_suffix="_xaug"
+model_suffix=""
 CUDA_VISIBLE_DEVICES=1 python train.py \
                 --sim_epochs=30 \
                 --sim_norm \
+                --dataset_name=CINIC10 \
                 --model_name=$model_name \
                 --model_suffix=$model_suffix \
                 --margin=$margin \

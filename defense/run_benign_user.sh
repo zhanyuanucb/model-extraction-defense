@@ -26,20 +26,20 @@
 #                      --log_suffix=benign_multi_cluster_$encoder_name \
 #                      --device_id=1
                       
-encoder_arch_name="simnet"                      
-encoder_suffix="_xaug"
-for thresh in 0.195
-do
-CUDA_VISIBLE_DEVICES=0 python benign_user.py \
-                      --encoder_arch_name=$encoder_arch_name \
-                      --encoder_margin=3.2 \
-                      --encoder_suffix=$encoder_suffix \
-                      --thresh=$thresh \
-                      --k=1 \
-                      --log_suffix=$encoder_arch_name \
-                      -l CIFAR10 CINIC10 \
-                      --device_id=0
-done                      
+#encoder_arch_name="simnet"                      
+#encoder_suffix="_xaug"
+#for thresh in 0.195
+#do
+#CUDA_VISIBLE_DEVICES=0 python benign_user.py \
+#                      --encoder_arch_name=$encoder_arch_name \
+#                      --encoder_margin=3.2 \
+#                      --encoder_suffix=$encoder_suffix \
+#                      --thresh=$thresh \
+#                      --k=1 \
+#                      --log_suffix=$encoder_arch_name \
+#                      -l CIFAR10 CINIC10 \
+#                      --device_id=0
+#done                      
                       
 # --thresh=0.0014249234207673                      
 #                      --thresh=0.002088276777882129 \
@@ -52,4 +52,17 @@ done
 #                      --log_suffix=benign_wrn28_cifar_k10 \
 #                      --return_conf_max \
 #                      --device_id=0                     
-                      
+
+encoder_arch_name="vgg16_bn"                      
+for thresh in 1 1.5 1.8
+do
+CUDA_VISIBLE_DEVICES=1 python benign_user.py \
+                      --encoder_arch_name=$encoder_arch_name \
+                      --encoder_margin=3.2 \
+                      --encoder_suffix=$encoder_suffix \
+                      --thresh=$thresh \
+                      --k=1 \
+                      --log_suffix=$encoder_arch_name \
+                      -l CINIC10 \
+                      --device_id=1
+done                                        

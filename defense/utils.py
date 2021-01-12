@@ -83,6 +83,31 @@ class PositiveNegativeSet(VisionDataset):
     def __len__(self):
         return self.n_samples
 
+class PositiveNegativeImageSet(ImageFolder):
+    """
+    For data in form of serialized tensor
+    """
+    def __init__(self, root, normal_transform=None, random_transform=None):
+        super(PositiveNegativeImageSet, self).__init__(root)
+        self.normal_transform = normal_transform
+        self.random_transform = random_transform
+        self.n_samples = len(self.imgs)
+
+    def __getitem__(self, index):
+        img_path, y = self.imgs[index]
+        img = self.loader(img_path)
+
+        ori_img = self.normal_transform(img)
+        ran_img = self.random_transform(img)
+
+        other_idx = random.choice(list(range(index)) + list(range(index+1, self.n_samples)))
+        img2_path, _ = self.imgs[other_idx]
+        img2 = self.loader(img2_path)
+        other_img = self.normal_transform(img2)
+
+        return ori_img, ran_img, other_img, y
+
+
 class BlinderPositiveNegativeSet(VisionDataset):
     """
     For data in form of serialized tensor

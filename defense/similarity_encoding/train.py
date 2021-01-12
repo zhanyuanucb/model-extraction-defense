@@ -37,7 +37,7 @@ from attack.utils.model import get_optimizer
 import attack.utils.utils as attack_utils
 import modelzoo.zoo as zoo
 import attack.config as cfg
-from defense.utils import PositiveNegativeSet, IdLayer, BlinderPositiveNegativeSet
+from defense.utils import PositiveNegativeSet, PositiveNegativeImageSet, IdLayer, BlinderPositiveNegativeSet
 from attack.adversary.query_blinding.blinders import AutoencoderBlinders
 import attack.adversary.query_blinding.transforms as blinders_transforms
 
@@ -51,7 +51,7 @@ __status__ = "Development"
 def main():
     parser = argparse.ArgumentParser(description='Train similarity encoder')
     parser.add_argument('--out_dir', metavar='PATH', type=str,
-                        help='Destination directory to store trained model', default="/mydata/model-extraction/model-extraction-defense/defense/similarity_encoding")
+                        help='Destination directory to store trained model', default="/mydata/model-extraction/model-extraction-defense/defense/similarity_encoding/")
     parser.add_argument('--ckp_dir', metavar='PATH', type=str,
                         help='Destination directory to store trained model', default="/mydata/model-extraction/model-extraction-defense/defense/similarity_encoding")
     parser.add_argument('--dataset_name', metavar='TYPE', type=str, help='Name of dataset', default='CIFAR10')
@@ -78,8 +78,8 @@ def main():
     args = parser.parse_args()
     params = vars(args)
 
-    out_path = params['out_dir']
-    attack_utils.create_dir(out_path)
+    feat_out_path = osp.join(params['out_dir'], "feat_extractor", f"{params['dataset_name']}-{params['model_name']}")
+    attack_utils.create_dir(feat_out_path)
 
     #torch.manual_seed(cfg.DEFAULT_SEED)
     if params['device_id'] >= 0:
@@ -105,9 +105,12 @@ def main():
     else:
         train_transform = datasets.modelfamily_to_transforms[modelfamily]['train2']
         test_transform = datasets.modelfamily_to_transforms[modelfamily]['test2']
-
-    trainset = datasets.__dict__[dataset_name](train=True, transform=train_transform) # Augment data while training
-    valset = datasets.__dict__[dataset_name](train=False, transform=test_transform)
+    try:
+        trainset = datasets.__dict__[dataset_name](train=True, transform=train_transform) # Augment data while training
+        valset = datasets.__dict__[dataset_name](train=False, transform=test_transform)
+    except TypeError as e:
+        trainset = datasets.__dict__[dataset_name](split="train", transform=train_transform) # Augment data while training
+        valset = datasets.__dict__[dataset_name](split="valid", transform=test_transform)
 
     model_name = params['model_name']
     num_classes = params['num_classes']
@@ -117,7 +120,7 @@ def main():
 
     train_epochs = params['train_epochs']
     optimizer_name = params["optimizer_name"]
-    optimizer = get_optimizer(model.parameters(), optimizer_name)
+    optimizer = get_optimizer(model.parameters(), optimizer_name, lr=1e-3)
     checkpoint_suffix = params["ckpt_suffix"]
     ckp_dir = params["ckp_dir"]
     load_pretrained = params['load_pretrained']
@@ -130,7 +133,7 @@ def main():
 
     # ---------------- Feature extraction training
     if not load_pretrained:
-        model_utils.train_model(model, trainset, out_path, epochs=train_epochs, testset=valset,
+        model_utils.train_model(model, trainset, feat_out_path, epochs=train_epochs, testset=valset,
                                 checkpoint_suffix=checkpoint_suffix, callback=callback, device=device, optimizer=optimizer)
         #print("Train encoder w/ random feature extractor")
     # ---------------- Or load a pretrained feature extractor
@@ -148,9 +151,17 @@ def main():
     train_dir = cfg.dataset2dir[dataset_name]["train"]
     test_dir = cfg.dataset2dir[dataset_name]["test"]
 
-    # ----------------- Similarity training
-    sim_trainset = PositiveNegativeSet(train_dir, normal_transform=test_transform, random_transform=random_transform, dataset=dataset_name)
-    sim_valset = PositiveNegativeSet(test_dir, normal_transform=test_transform, random_transform=random_transform, dataset=dataset_name)
+    try:    
+        # ----------------- Similarity training
+        sim_trainset = PositiveNegativeSet(train_dir, normal_transform=test_transform, random_transform=random_transform, dataset=dataset_name)
+
+        sim_valset = PositiveNegativeSet(test_dir, normal_transform=test_transform, random_transform=random_transform, dataset=dataset_name)
+    except IsADirectoryError as e:
+        # ----------------- Similarity training
+        sim_trainset = PositiveNegativeImageSet(train_dir, normal_transform=test_transform, random_transform=random_transform)
+
+        sim_valset = PositiveNegativeImageSet(test_dir, normal_transform=test_transform, random_transform=random_transform)
+
 
     #blinders_dir = params["blinders_dir"]
     #if blinders_dir is not None:
@@ -202,20 +213,18 @@ def main():
     resume = params["resume"]
 
     model_suffix = params["model_suffix"]
-    out_path = osp.join(out_path, model_name+model_suffix)
-    if not osp.exists(out_path):
-        os.mkdir(out_path)
+    sim_out_path = osp.join(params['out_dir'], model_name+model_suffix)
+    attack_utils.create_dir(sim_out_path)
 
-    out_path = osp.join(out_path, "{}-margin-{:.1f}".format(dataset_name, margin_test))
-    if not osp.exists(out_path):
-        os.mkdir(out_path)
+    sim_out_path = osp.join(sim_out_path, "{}-margin-{:.1f}".format(dataset_name, margin_test))
+    attack_utils.create_dir(sim_out_path)
 
-    encoder_utils.train_model(model, sim_trainset, out_path, epochs=sim_epochs, testset=sim_valset,
+    encoder_utils.train_model(model, sim_trainset, sim_out_path, epochs=sim_epochs, testset=sim_valset,
                             criterion_train=margin_train, criterion_test=margin_test,
                             checkpoint_suffix=checkpoint_suffix, device=device, optimizer=sim_optimizer, adv_train=adv_train, resume=resume)
 
     params['created_on'] = str(datetime.now())
-    params_out_path = osp.join(out_path, f'params_train{checkpoint_suffix}.json')
+    params_out_path = osp.join(sim_out_path, f'params_train{checkpoint_suffix}.json')
     with open(params_out_path, 'w') as jf:
         json.dump(params, jf, indent=True)
 

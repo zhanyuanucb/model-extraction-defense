@@ -48,12 +48,10 @@ class AdvDetector:
         #self.log_dir = log_dir
         self.log_file = osp.join(log_dir, f"detector.{log_suffix}.log.tsv")
     
-    def init(self, blackbox_dir, device, time=None, output_type="one_hot", T=1.):
+    def init(self, device, time=None, output_type="one_hot", T=1.):
         self.device = device
         self.MEAN = self.MEAN.to(self.device)
         self.STD = self.STD.to(self.device)
-        #self.blackbox = Blackbox.from_modeldir(blackbox_dir, device, output_type=output_type, T=T)
-        #self._init_log(time)
     
     def _process(self, images):
         is_adv = [0 for _ in range(images.size(0))]
@@ -92,25 +90,20 @@ class AdvDetector:
         self.buffer.append(query)
         self.call_count += 1
 
+        is_attack = k_avg_dist < self.thresh
+        if is_attack:
+            self.buffer.pop()
+
         if len(self.buffer) >= self.buffer_size: # clean buffer
             self.memory.append(np.stack(self.buffer, axis=0))
             self.buffer = []
 
-        is_attack = k_avg_dist < self.thresh
-        if is_attack:
-            self.detection_count += 1
-            if self.detection_count % self.num_clusters == 0:
-                self._write_log(k_avg_dist)
-                self.alarm_count += 1
-                self.clear_memory()
-        if self.memory_size >= self.memory_capacity:
-            self.clear_memory()
         return is_attack
 
-    def clear_memory(self):
-        self.buffer = []
-        self.memory = []
-        self.memory_size = 0
+#    def clear_memory(self):
+#        self.buffer = []
+#        self.memory = []
+#        self.memory_size = 0
 
 #    def _init_log(self, time):
 #        if not osp.exists(self.log_file):

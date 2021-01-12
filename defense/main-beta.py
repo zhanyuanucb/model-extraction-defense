@@ -12,6 +12,7 @@ import torchvision.models as models
 
 import attack.config as cfg
 import attack.utils.model as model_utils
+from attack.adversary.detector_adv import AdvDetector
 from attack import datasets
 import modelzoo.zoo as zoo
 from detector import *
@@ -178,6 +179,27 @@ def main():
     else:
         blackbox = Blackbox.from_modeldir(blackbox_dir, device, output_type=output_type, T=T)
 
+    #######################
+    # Adaptive encoder
+    #######################
+    #import copy
+    #encoder_adv = copy.deepcopy(encoder)
+    adv_encoder = zoo.get_net("vgg16_bn", modelfamily, num_classes=num_classes)
+    adv_encoder_ckp = "/mydata/model-extraction/model-extraction-defense/defense/similarity_encoding/vgg16_bn/CINIC10-margin-3.2/checkpoint.sim-3.2.pth.tar"
+
+    adv_encoder.fc = IdLayer().to(device)
+
+    print(f"=> Loading adv similarity encoder checkpoint '{adv_encoder_ckp}'")
+    checkpoint = torch.load(adv_encoder_ckp)
+    start_epoch = checkpoint['epoch']
+    adv_encoder.load_state_dict(checkpoint['state_dict'])
+    print("===> loaded checkpoint (epoch {})".format(checkpoint['epoch']))
+    #encoder.fc = IdLayer(activation=activation)
+    adv_encoder = encoder.to(device)
+    adv_encoder.eval()
+    detector_adv = AdvDetector(k, 2., adv_encoder, MEAN, STD, log_suffix="adv_encoder", log_dir=log_dir)
+    detector_adv.init(device)
+
     # ----------- Initialize Adversary
 
     # set up query blinding
@@ -222,7 +244,7 @@ def main():
     random_adv = True if params['random_adv'] else False
     adv_transform = True if params['adv_transform'] else False
     adversary = JacobianAdversary(blackbox, budget, model_adv_name, model_adv_pretrained, modelfamily, seedset,
-                                  testset, device, ckp_out_root, batch_size=batch_size, ema_decay=ema_decay,
+                                  testset, device, ckp_out_root, batch_size=batch_size, ema_decay=ema_decay, detector=detector_adv,
                                   eps=eps, num_steps=num_steps, train_epochs=train_epochs, kappa=kappa, tau=tau, rho=rho, take_lastk=take_lastk,
                                   sigma=sigma, random_adv=random_adv, adv_transform=adv_transform, aug_strategy=policy)
 

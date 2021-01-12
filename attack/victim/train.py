@@ -87,8 +87,14 @@ def main():
     modelfamily = datasets.dataset_to_modelfamily[dataset_name]
     train_transform = datasets.modelfamily_to_transforms[modelfamily]['train']
     test_transform = datasets.modelfamily_to_transforms[modelfamily]['test']
-    trainset = dataset(train=True, transform=train_transform)
-    testset = dataset(train=False, transform=test_transform)
+
+    try:
+        trainset = dataset(train=True, transform=train_transform)
+        testset = dataset(train=False, transform=test_transform)
+    except TypeError as e:
+        trainset = dataset(split="train", transform=train_transform)
+        testset = dataset(split="valid", transform=test_transform)
+
     #num_classes = len(trainset.classes)
     num_classes = params['num_classes']
 
@@ -114,6 +120,11 @@ def main():
 
     # Store arguments
     out_path = params['out_path']
+
+    out_path = osp.join(out_path, f"{params['dataset']}-{params['model_arch']}")
+    if not osp.exists(out_path):
+        os.mkdir(out_path)
+
     params['created_on'] = str(datetime.now())
     params_out_path = osp.join(out_path, 'params.json')
     with open(params_out_path, 'w') as jf:

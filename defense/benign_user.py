@@ -71,15 +71,15 @@ def main():
 
     encoder_arch_name = params["encoder_arch_name"]
     num_classes = 10
-    encoder = zoo.get_net(encoder_arch_name, "cifar", num_classes=num_classes)
-    activation_name = params['activation']
-    if activation_name == "sigmoid":
-        activation = nn.Sigmoid()
-        print(f"Encoder activation: {activation_name}")
-    else:
-        print("Normal activation")
-        activation = None
-    encoder.fc = IdLayer(activation=activation)
+    #encoder = zoo.get_net(encoder_arch_name, "cifar", num_classes=num_classes)
+    #activation_name = params['activation']
+    #if activation_name == "sigmoid":
+    #    activation = nn.Sigmoid()
+    #    print(f"Encoder activation: {activation_name}")
+    #else:
+    #    print("Normal activation")
+    #    activation = None
+    #encoder.fc = IdLayer(activation=activation)
     MEAN, STD = cfg.NORMAL_PARAMS["cifar"]
 
     # ----------- Setup Similarity Encoder
@@ -87,7 +87,6 @@ def main():
     encoder_ckp = params["encoder_ckp"]
     encoder_suffix = params["encoder_suffix"]
     candidate_sets = params["testset_names"]
-    encoder_arch_name += encoder_suffix
     # setup similarity encoder
     if use_lpips:
         blackbox = LpipsDetector(k, thresh, log_suffix=log_suffix, log_dir=log_dir)
@@ -130,7 +129,6 @@ def main():
     else:
         blackbox = Blackbox.from_modeldir(blackbox_dir, device)
     # ----------- Set up query set
-    test_transform = datasets.modelfamily_to_transforms["cifar"]['test']
     batch_size = params["batch_size"]
     num_workers = 10
 
@@ -143,18 +141,25 @@ def main():
         modelfamily = datasets.dataset_to_modelfamily[testset_name]
         dataset = datasets.__dict__[testset_name]
 
-        #test_transform = datasets.modelfamily_to_transforms[modelfamily]['test']
-        trainset = dataset(train=True, transform=test_transform)
-        print('=> Queryset size (training split) = {}'.format(len(trainset)))
-        testset = dataset(train=False, transform=test_transform)
-        print('=> Queryset size (test split) = {}'.format(len(testset)))
+        test_transform = datasets.modelfamily_to_transforms[modelfamily]['test']
+        try:
+            trainset = dataset(train=True, transform=test_transform)
+            print('=> Queryset size (training split) = {}'.format(len(trainset)))
+            testset = dataset(train=False, transform=test_transform)
+            print('=> Queryset size (test split) = {}'.format(len(testset)))
+        except TypeError as e:
+            trainset = dataset(split="train", transform=test_transform) # Augment data while training
+            print('=> Queryset size (training split) = {}'.format(len(trainset)))
+            testset = dataset(split="valid", transform=test_transform)
+            print('=> Queryset size (test split) = {}'.format(len(testset)))
+
         train_loader = DataLoader(trainset, batch_size=batch_size, shuffle=True)
         test_loader = DataLoader(testset, batch_size=batch_size, shuffle=True)
 
         total_train, correct_train = 0, 0
         for images, labels in train_loader:
             labels = labels.to(device)
-            is_adv, y = blackbox(images)
+            y = blackbox(images)
             _, predicted = y.max(1)
             correct_train += predicted.eq(labels).sum().item()
             total_train += labels.size(0)
@@ -162,7 +167,7 @@ def main():
         total_val, correct_val = 0, 0
         for images, labels in test_loader:
             labels = labels.to(device)
-            is_adv, y = blackbox(images)
+            y = blackbox(images)
             _, predicted = y.max(1)
             correct_val += predicted.eq(labels).sum().item()
             total_val += labels.size(0)
