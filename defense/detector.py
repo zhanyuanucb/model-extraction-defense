@@ -43,6 +43,7 @@ class Detector:
         self.num_clusters = num_clusters
         self.memory_capacity = memory_capacity
         self.memory_size = 0
+        self.query_dist = []
 
         # Debug
         #self.log_dir = log_dir
@@ -88,6 +89,7 @@ class Detector:
         k_nearest_dists = np.partition(dists, k-1)[:k, None]
         k_avg_dist = np.mean(k_nearest_dists)
         #print(self.query_count, k_avg_dist)
+        self.query_dist.append(k_avg_dist)
 
         self.buffer.append(query)
         self.call_count += 1

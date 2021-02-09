@@ -192,7 +192,7 @@ class JacobianAdversary:
         rho_current = 0
         model_adv = None
         if not self.random_adv:
-            while self.blackbox.call_count < self.budget:
+            while self.blackbox.call_count < self.budget and rho_current<self.rho:
                 print('=> Beginning substitute epoch {} (|D| = {})'.format(rho_current, len(self.D)))
                 # -------------------------- 0. Initialize Model
                 model_adv = zoo.get_net(self.model_adv_name, self.modelfamily, self.model_adv_pretrained,
@@ -246,6 +246,7 @@ class JacobianAdversary:
 
                 # -------------------------- 4. End if necessary
                 rho_current += 1
+                torch.save(self.blackbox.query_dist, osp.join(self.out_dir, "query_dist.pt"))
                 if (self.blackbox.call_count >= self.budget) or ((self.rho is not None) and (rho_current >= self.rho)):
                     print('=> # BB Queries ({}) >= budget ({}). Ending attack.'.format(self.blackbox.call_count,
                                                                                        self.budget))
@@ -423,6 +424,7 @@ class JacobianAdversary:
         adv2bb_t = 0
         adv2adv_t = 0
         adv2both_t = 0
+        num_skips = 0
 
         for i, (X, Y) in enumerate(loader):
             assert X.shape[0] == Y.shape[0] == 1, 'Only supports batch_size = 1'
@@ -449,6 +451,16 @@ class JacobianAdversary:
 
 
                 x_aug = X + delta_i
+                """
+                Adversarial Detector
+                """
+                if self.detector_adv is not None:
+                    is_adv = self.detector_adv(x_aug)[0]
+
+                    if is_adv:
+                        num_skips += 1
+                        continue
+
                 Y_adv = model_adv(x_aug)
                 try: # No detector
                     Y_i = self.blackbox(x_aug, is_adv=True)
@@ -484,8 +496,13 @@ class JacobianAdversary:
             if self.blackbox.call_count >= self.budget:
                 break
 
-        X_aug = torch.cat(X_aug, dim=0)
-        Y_aug = torch.cat(Y_aug, dim=0)
+        total = (i+1)*self.topk
+        print(f"skip: {num_skips}/{total}")
+        if len(X_aug) > 0:        
+            X_aug = torch.cat(X_aug, dim=0)
+            Y_aug = torch.cat(Y_aug, dim=0)
+        else:
+            return D_sampled
 
         try: 
             Dx_augmented = torch.cat([self.D.tensors[0], X_aug])[:self.budget]
@@ -498,7 +515,6 @@ class JacobianAdversary:
 
         #------------------------- Logging
         # Write number of adversarial examples to log
-        total = (i+1)*self.topk
 
         print("Untargeted:")
         msg = f"{adv2bb}/{(i+1)*self.topk} ({int(100*adv2bb/((i+1)*self.topk))})%"
@@ -577,3 +593,47 @@ class JacobianAdversary:
 
         delta = images - inputs
         return delta
+
+    def binary_search_linf_targ(self, model_adv, model_vic, inputs, targets, y_targ, epsilon, alpha, device, num_iter=8, threshold=1e-4):
+        attack = PGD(abs_stepsize=2*epsilon/num_iter)
+        inputs = inputs.to(device)
+
+        images = self.denormalize(inputs)
+        adv_criterion = TargetedMisclassification(y_targ[None])
+        fmodel = foolbox.models.PyTorchModel(model_adv, bounds=(0, 1), preprocessing={"mean":self.MEAN.to(device), "std":self.STD.to(device)})
+        _, images, _ = attack(fmodel, images, criterion=adv_criterion, epsilons=8./256)
+        images = self.normalize(images)
+
+        Y_vic = model_vic(images)
+        if Y_vic.argmax(-1).eq(y_targ).item() == True:
+            images_b = self.binary_search(model_vic, images, y_targ, inputs, targets, thresh=threshold)
+            delta = images_b - inputs
+        else:
+            delta = images - inputs
+        return delta
+
+    def binary_search(self, model, x1, y1, x2, y2, thresh, max_attempts=1000):
+        attempts = 0
+        with torch.no_grad():
+            while True:
+                mid = (x1+x2)/2
+                attempts += 1                        
+                if attempts > max_attempts:
+                    return mid
+
+                Y = model(mid)
+                prob_mid = F.softmax(Y, dim=1)
+                pred_mid = torch.argmax(prob_mid, dim=1)
+
+                if pred_mid != y1 and pred_mid != y2:
+                    return mid
+                elif torch.abs(prob_mid[0][y1]-prob_mid[0][y2]) < thresh:
+                    return mid
+                elif pred_mid == y1:
+                    x1 = mid
+                elif pred_mid == y2:
+                    x2 = mid                    
+
+                
+            
+

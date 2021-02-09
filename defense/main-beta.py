@@ -50,7 +50,7 @@ def main():
     parser.add_argument('--testset', metavar='TYPE', type=str, help='Blackbox testset (P_V(X))', required=True)
     parser.add_argument("--eps", metavar="TYPE", type=float, default=0.1)
     parser.add_argument('--num_steps', metavar='N', type=int, help='# steps', default=8)
-    parser.add_argument('--rho', metavar='N', type=int, help='# Data Augmentation Steps', default=None)
+    parser.add_argument('--rho', metavar='N', type=int, help='# Data Augmentation Steps', default=6)
     parser.add_argument('--sigma', metavar='N', type=int, help='Reservoir sampling beyond these many epochs', default=3)
     parser.add_argument('--kappa', metavar='N', type=int, help='Size of reservoir', default=None)
     parser.add_argument('--take_lastk', metavar='N', type=int, help='Size of reservoir', default=-1)
@@ -76,6 +76,7 @@ def main():
     parser.add_argument("--encoder_margin", metavar="TYPE", type=float, default=3.2)
     parser.add_argument("--k", metavar="TYPE", type=int, default=1)
     parser.add_argument("--thresh", metavar="TYPE", type=float, help="detector threshold", default=0.16197727304697038)
+    parser.add_argument('--adaptive_adv', action='store_true', help='Perform data augmentation', default=False)
     
     # -------------------- Other params
     parser.add_argument("--log_suffix", metavar="TYPE", type=str, default="testing")
@@ -184,21 +185,22 @@ def main():
     #######################
     #import copy
     #encoder_adv = copy.deepcopy(encoder)
-    adv_encoder = zoo.get_net("vgg16_bn", modelfamily, num_classes=num_classes)
-    adv_encoder_ckp = "/mydata/model-extraction/model-extraction-defense/defense/similarity_encoding/vgg16_bn/CINIC10-margin-3.2/checkpoint.sim-3.2.pth.tar"
+    detector_adv = None
+    if params["adaptive_adv"]:
+        adv_encoder = zoo.get_net("vgg16_bn", modelfamily, num_classes=num_classes)
+        adv_encoder.fc = IdLayer().to(device)
+        adv_encoder_ckp = "/mydata/model-extraction/model-extraction-defense/defense/similarity_encoding/vgg16_bn/CINIC10-margin-3.2/checkpoint.sim-3.2.pth.tar"
 
-    adv_encoder.fc = IdLayer().to(device)
-
-    print(f"=> Loading adv similarity encoder checkpoint '{adv_encoder_ckp}'")
-    checkpoint = torch.load(adv_encoder_ckp)
-    start_epoch = checkpoint['epoch']
-    adv_encoder.load_state_dict(checkpoint['state_dict'])
-    print("===> loaded checkpoint (epoch {})".format(checkpoint['epoch']))
-    #encoder.fc = IdLayer(activation=activation)
-    adv_encoder = encoder.to(device)
-    adv_encoder.eval()
-    detector_adv = AdvDetector(k, 2., adv_encoder, MEAN, STD, log_suffix="adv_encoder", log_dir=log_dir)
-    detector_adv.init(device)
+        print(f"=> Loading adv similarity encoder checkpoint '{adv_encoder_ckp}'")
+        checkpoint = torch.load(adv_encoder_ckp)
+        start_epoch = checkpoint['epoch']
+        adv_encoder.load_state_dict(checkpoint['state_dict'])
+        print("===> loaded checkpoint (epoch {})".format(checkpoint['epoch']))
+        #encoder.fc = IdLayer(activation=activation)
+        adv_encoder = encoder.to(device)
+        adv_encoder.eval()
+        detector_adv = AdvDetector(k, 1.25, adv_encoder, MEAN, STD, log_suffix="adv_encoder", log_dir=log_dir)
+        detector_adv.init(device)
 
     # ----------- Initialize Adversary
 
@@ -262,6 +264,9 @@ def main():
     params_out_path = osp.join(ckp_out_root, 'params_transfer.json')
     with open(params_out_path, 'w') as jf:
         json.dump(params, jf, indent=True)
+
+    query_dist_out_path = osp.join(ckp_out_root, 'query_dist.pt')
+    torch.save(blackbox.query_dist, query_dist_out_path)
 
 if __name__ == '__main__':
     main()

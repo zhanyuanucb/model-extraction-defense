@@ -61,7 +61,7 @@ class AdvDetector:
         for i, query in enumerate(queries):
             self.memory_size += 1
             is_attack = self._process_query(query)
-            is_adv[i] = 1 if is_attack else 0
+            is_adv[i] = is_attack
         return is_adv
 
     def _process_query(self, query):
@@ -86,17 +86,14 @@ class AdvDetector:
         k_nearest_dists = np.partition(dists, k-1)[:k, None]
         k_avg_dist = np.mean(k_nearest_dists)
         #print(self.query_count, k_avg_dist)
-
-        self.buffer.append(query)
-        self.call_count += 1
-
         is_attack = k_avg_dist < self.thresh
-        if is_attack:
-            self.buffer.pop()
+        if not is_attack:
+            self.buffer.append(query)
+            self.call_count += 1
 
-        if len(self.buffer) >= self.buffer_size: # clean buffer
-            self.memory.append(np.stack(self.buffer, axis=0))
-            self.buffer = []
+            if len(self.buffer) >= self.buffer_size: # clean buffer
+                self.memory.append(np.stack(self.buffer, axis=0))
+                self.buffer = []
 
         return is_attack
 

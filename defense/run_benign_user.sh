@@ -53,9 +53,22 @@
 #                      --return_conf_max \
 #                      --device_id=0                     
 
+#encoder_arch_name="simnet"                      
+#encoder_suffix=""
+#thresh=0.16197727304697038
+#CUDA_VISIBLE_DEVICES=1 python benign_user.py \
+#                      --encoder_arch_name=$encoder_arch_name \
+#                      --encoder_margin=3.2 \
+#                      --encoder_suffix=$encoder_suffix \
+#                      --thresh=$thresh \
+#                      --k=1 \
+#                      --log_suffix=$encoder_arch_name \
+#                      -l CIFAR10 CINIC10\
+#                      --device_id=1
+
 encoder_arch_name="vgg16_bn"                      
-for thresh in 1 1.5 1.8
-do
+encoder_suffix=""
+thresh=1.25
 CUDA_VISIBLE_DEVICES=1 python benign_user.py \
                       --encoder_arch_name=$encoder_arch_name \
                       --encoder_margin=3.2 \
@@ -63,6 +76,5 @@ CUDA_VISIBLE_DEVICES=1 python benign_user.py \
                       --thresh=$thresh \
                       --k=1 \
                       --log_suffix=$encoder_arch_name \
-                      -l CINIC10 \
+                      -l CINIC10 CIFAR10\
                       --device_id=1
-done                                        

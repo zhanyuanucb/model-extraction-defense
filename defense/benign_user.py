@@ -174,10 +174,14 @@ def main():
         print("=> Validation accuracy: {:.2f}".format(correct_val/total_val))
 
     params["num_detection"] = blackbox.alarm_count
+    params["false_positive_rate"] = f"{100*blackbox.alarm_count/(total_train+total_val)}%"
+    print(f"false positive rate: {100*blackbox.alarm_count/(total_train+total_val)}%")
     # Store arguments
     params_out_path = osp.join(log_dir, 'params_benign.json')
     with open(params_out_path, 'w') as jf:
         json.dump(params, jf, indent=True)
+    query_dist_out_path = osp.join(log_dir, 'query_dist.pt')
+    torch.save(blackbox.query_dist, query_dist_out_path)
 
 if __name__ == '__main__':
     main()
