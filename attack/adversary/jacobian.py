@@ -52,7 +52,7 @@ class JacobianAdversary:
     2. (JB-{topk, self}) "PRADA: Protecting against DNN Model Stealing Attacks", Juuti et al., Euro S&P '19
     """
     def __init__(self, blackbox, budget, model_adv_name, model_adv_pretrained, modelfamily, seedset, testset, device,
-                 out_dir, batch_size=cfg.DEFAULT_BATCH_SIZE, ema_decay=-1, detector=None, 
+                 out_dir, batch_size=cfg.DEFAULT_BATCH_SIZE, ema_decay=-1, detector=None, binary_search=False,
                  eps=0.1, num_steps=8, train_epochs=20, kappa=400, tau=None, rho=6, sigma=-1, take_lastk=-1,
                  query_batch_size=1, random_adv=False, adv_transform=False, aug_strategy='jbda', useprobs=True, final_train_epochs=100):
         self.blackbox = blackbox
@@ -77,6 +77,7 @@ class JacobianAdversary:
         self.rho = rho
         self.sigma = sigma
         self.take_lastk = take_lastk
+        self.binary_search = binary_search
         self.device = device
         self.MEAN, self.STD = cfg.NORMAL_PARAMS[modelfamily]
         self.MEAN, self.STD = torch.Tensor(self.MEAN), torch.Tensor(self.STD)
@@ -99,6 +100,8 @@ class JacobianAdversary:
         self.accuracies = []  # Track test accuracies over time
         self.useprobs = useprobs
         self.log_path = osp.join(self.out_dir, "advaug.log.tsv")
+
+        self.images2inputs, self.imagesb2inputs, self.feat2feat_b, self.feat2feat_org = [], [], [], []
 
         # -------------------------- Initialize log
         if self.log_path:
@@ -237,7 +240,7 @@ class JacobianAdversary:
                     self.D = self.jacobian_augmentation(model_adv, rho_current, step_size=self.eps, num_steps=self.num_steps)
                 elif self.aug_strategy == 'jbtop{}'.format(self.topk):
                     self.D = self.jacobian_augmentation_topk(model_adv, rho_current, step_size=self.eps, num_steps=self.num_steps,
-                                                             take_lastk=self.take_lastk, use_foolbox=False)
+                                                             take_lastk=self.take_lastk, use_foolbox=False, binary_search=self.binary_search)
                 elif self.aug_strategy == 'foolbox_adv{}'.format(self.topk):
                     self.D = self.jacobian_augmentation_topk(model_adv, rho_current, step_size=self.eps, num_steps=self.num_steps,
                                                              take_lastk=self.take_lastk, use_foolbox=True)
@@ -381,7 +384,7 @@ class JacobianAdversary:
 
         return D_augmented
 
-    def jacobian_augmentation_topk(self, model_adv, rho_current, step_size=0.1, num_steps=8, take_lastk=-1, use_foolbox=False):
+    def jacobian_augmentation_topk(self, model_adv, rho_current, step_size=0.1, num_steps=8, take_lastk=-1, use_foolbox=False, binary_search=False):
         if (self.kappa is not None) and (rho_current >= self.sigma):
             D_sampled = self.rand_sample(self.D, self.kappa)
         elif take_lastk > 0:
@@ -445,6 +448,9 @@ class JacobianAdversary:
                 if use_foolbox:
                     delta_i = self.foolbox_linf_targ(model_adv, X, Y.argmax(dim=1), c, epsilon=step_size, alpha=0.01,
                                                  device=self.device)
+                if binary_search:
+                    delta_i = self.binary_search_linf_targ(model_adv, self.blackbox, X, Y.argmax(dim=1), c,
+                                                  epsilon=step_size, alpha=0.01, device=self.device)
                 else:
                     delta_i = self.pgd_linf_targ(model_adv, X, Y.argmax(dim=1), c, epsilon=step_size, alpha=0.01,
                                              device=self.device)
@@ -594,46 +600,67 @@ class JacobianAdversary:
         delta = images - inputs
         return delta
 
-    def binary_search_linf_targ(self, model_adv, model_vic, inputs, targets, y_targ, epsilon, alpha, device, num_iter=8, threshold=1e-4):
+    def binary_search_linf_targ(self, model_adv, model_vic, inputs, targets, y_targ, epsilon, alpha, device, num_iter=8, threshold=1e-6):
         attack = PGD(abs_stepsize=2*epsilon/num_iter)
         inputs = inputs.to(device)
 
         images = self.denormalize(inputs)
         adv_criterion = TargetedMisclassification(y_targ[None])
         fmodel = foolbox.models.PyTorchModel(model_adv, bounds=(0, 1), preprocessing={"mean":self.MEAN.to(device), "std":self.STD.to(device)})
-        _, images, _ = attack(fmodel, images, criterion=adv_criterion, epsilons=8./256)
+        _, images, is_adv = attack(fmodel, images, criterion=adv_criterion, epsilons=0.1)
         images = self.normalize(images)
 
-        Y_vic = model_vic(images)
-        if Y_vic.argmax(-1).eq(y_targ).item() == True:
-            images_b = self.binary_search(model_vic, images, y_targ, inputs, targets, thresh=threshold)
+        if is_adv:
+            images_b = self.boundary_search(model_vic, images.clone(), y_targ, inputs.clone(), targets, thresh=threshold)
             delta = images_b - inputs
+            #print(torch.dist(images, inputs, 2))
+            #print(torch.dist(images_b, inputs, 2))
+            #print(torch.dist(images_b, images, 2))
+            with torch.no_grad():
+            #    #adv_feat_b = self.detector_adv.encoder(images_b)
+            #    #adv_feat = self.detector_adv.encoder(images)
+
+                vic_feat_b = self.blackbox.encoder(images_b)
+                vic_feat = self.blackbox.encoder(images)
+                vic_feat_ori = self.blackbox.encoder(inputs)
+
+            #    #print(torch.dist(adv_feat_b, adv_feat, 2))
+            #    print(torch.dist(vic_feat, vic_feat_ori, 2))
+            #    print(torch.dist(vic_feat_b, vic_feat_ori, 2))
+            #    print(torch.dist(vic_feat_b, vic_feat, 2))
+            #import ipdb; ipdb.set_trace()
+            self.images2inputs.append(torch.dist(images, inputs, 2).item())
+            self.imagesb2inputs.append(torch.dist(images_b, inputs, 2).item())
+
+            self.feat2feat_org.append(torch.dist(vic_feat, vic_feat_ori, 2).item()) 
+            self.feat2feat_b.append(torch.dist(vic_feat_b, vic_feat_ori, 2).item())
+
+            torch.save(self.images2inputs, "./images2inputs.pylist")
+            torch.save(self.imagesb2inputs, "./images2binputs.pylist")
+            torch.save(self.feat2feat_org, "./feat2feat_org.pylist")
+            torch.save(self.feat2feat_b, "./feat2feat_b.pylist")
         else:
             delta = images - inputs
         return delta
 
-    def binary_search(self, model, x1, y1, x2, y2, thresh, max_attempts=1000):
+    def boundary_search(self, model, x1, y1, x2, y2, thresh, max_attempts=1000):
         attempts = 0
         with torch.no_grad():
             while True:
                 mid = (x1+x2)/2
                 attempts += 1                        
+
                 if attempts > max_attempts:
                     return mid
 
                 Y = model(mid)
-                prob_mid = F.softmax(Y, dim=1)
-                pred_mid = torch.argmax(prob_mid, dim=1)
+                pred_mid = torch.argmax(Y, dim=1)
 
-                if pred_mid != y1 and pred_mid != y2:
+                if (pred_mid != y1).item() and (pred_mid != y2).item():
                     return mid
-                elif torch.abs(prob_mid[0][y1]-prob_mid[0][y2]) < thresh:
+                elif torch.max(torch.abs(x1-x2)).item() < thresh:
                     return mid
                 elif pred_mid == y1:
                     x1 = mid
                 elif pred_mid == y2:
                     x2 = mid                    
-
-                
-            
-

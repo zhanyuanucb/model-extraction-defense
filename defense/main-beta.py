@@ -246,7 +246,7 @@ def main():
     random_adv = True if params['random_adv'] else False
     adv_transform = True if params['adv_transform'] else False
     adversary = JacobianAdversary(blackbox, budget, model_adv_name, model_adv_pretrained, modelfamily, seedset,
-                                  testset, device, ckp_out_root, batch_size=batch_size, ema_decay=ema_decay, detector=detector_adv,
+                                  testset, device, ckp_out_root, batch_size=batch_size, ema_decay=ema_decay, detector=detector_adv, binary_search=True,
                                   eps=eps, num_steps=num_steps, train_epochs=train_epochs, kappa=kappa, tau=tau, rho=rho, take_lastk=take_lastk,
                                   sigma=sigma, random_adv=random_adv, adv_transform=adv_transform, aug_strategy=policy)
 
