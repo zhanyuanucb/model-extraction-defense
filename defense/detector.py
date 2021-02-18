@@ -135,3 +135,6 @@ class Detector:
         # ----------------------------
         output = self.blackbox(images)
         return output
+
+    def eval(self):
+        self.blackbox.eval()

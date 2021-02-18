@@ -88,3 +88,6 @@ class Blackbox(object):
         #return F.softmax(logits, dim=1)
         p = F.softmax(logits, dim=1)
         return F.softmax(p.pow(1/self.T), dim=1)
+
+    def eval(self):
+        self.model.eval()

@@ -42,7 +42,9 @@ def main():
     parser.add_argument("--encoder_suffix", metavar="TYPE", type=str, default="")
     parser.add_argument('--activation', metavar='TYPE', type=str, help='Activation name', default=None)
     parser.add_argument("--k", metavar="TYPE", type=int, default=1)
-    parser.add_argument("--thresh", metavar="TYPE", type=float, help="detector threshold", default=0.0012760052197845653)
+    parser.add_argument("--target", metavar="TYPE", type=float, help="targeted FPR", default=1e-2)
+    parser.add_argument("--lower", metavar="TYPE", type=float, help="binary search lowerbound", default=1e-3)
+    parser.add_argument("--upper", metavar="TYPE", type=float, help="binary search upperbound", default=2.)
     parser.add_argument("--log_suffix", metavar="TYPE", type=str, default="benign")
     parser.add_argument("--log_dir", metavar="PATH", type=str,
                         default="./benign_log")
@@ -61,7 +63,6 @@ def main():
     created_on = params['created_on']
     # ----------- Initialize Detector
     k = params["k"]
-    thresh = params["thresh"]
     log_suffix = params["log_suffix"]
     log_dir = params["log_dir"]
     use_lpips = params["lpips"]
@@ -122,60 +123,84 @@ def main():
         #encoder.fc = IdLayer(activation=activation)
         encoder = encoder.to(device)
         encoder.eval()
-        print(f"==> Loaded encoder: arch_name: {encoder_arch_name} \n margin: {encoder_margin} \n thresh: {thresh}")
+        #print(f"==> Loaded encoder: arch_name: {encoder_arch_name} \n margin: {encoder_margin} \n thresh: {thresh}")
 
-        blackbox = Detector(k, thresh, encoder, MEAN, STD, log_suffix=log_suffix, log_dir=log_dir)
-        blackbox.init(blackbox_dir, device, time=created_on)
+        #blackbox = Detector(k, thresh, encoder, MEAN, STD, log_suffix=log_suffix, log_dir=log_dir)
+        #blackbox.init(blackbox_dir, device, time=created_on)
     else:
         blackbox = Blackbox.from_modeldir(blackbox_dir, device)
     # ----------- Set up query set
     batch_size = params["batch_size"]
-    num_workers = 10
 
-    #--------- Extraction
-    conf_list = []
-    for testset_name in candidate_sets:
-        valid_datasets = datasets.__dict__.keys()
-        if testset_name not in valid_datasets:
-            raise ValueError('Dataset not found. Valid arguments = {}'.format(valid_datasets))
-        modelfamily = datasets.dataset_to_modelfamily[testset_name]
-        dataset = datasets.__dict__[testset_name]
+    #--------- Binary Search for threshold
+    lower, upper = params["lower"], params["upper"]
+    fpr = 1.
+    target = params["target"]
 
-        test_transform = datasets.modelfamily_to_transforms[modelfamily]['test']
-        try:
-            trainset = dataset(train=True, transform=test_transform)
-            print('=> Queryset size (training split) = {}'.format(len(trainset)))
-            testset = dataset(train=False, transform=test_transform)
-            print('=> Queryset size (test split) = {}'.format(len(testset)))
-        except TypeError as e:
-            trainset = dataset(split="train", transform=test_transform) # Augment data while training
-            print('=> Queryset size (training split) = {}'.format(len(trainset)))
-            testset = dataset(split="valid", transform=test_transform)
-            print('=> Queryset size (test split) = {}'.format(len(testset)))
+    while abs(fpr - target) > 1e-4: # FPR = 0.1 +- 0.01% 
+        thresh = (lower+upper)/2.
+        print(f"Current FPR: {fpr}%")
+        print(f"Searching from [{lower}, {upper}]")
+        print(f"Calculating FPR for thresh {thresh}...")
+        blackbox = Detector(k, thresh, encoder, MEAN, STD, log_suffix=log_suffix, log_dir=log_dir)
+        blackbox.init(blackbox_dir, device, time=created_on)
+        total_input = 0
+    
+        for testset_name in candidate_sets:
+            valid_datasets = datasets.__dict__.keys()
+            if testset_name not in valid_datasets:
+                raise ValueError('Dataset not found. Valid arguments = {}'.format(valid_datasets))
+            modelfamily = datasets.dataset_to_modelfamily[testset_name]
+            dataset = datasets.__dict__[testset_name]
 
-        train_loader = DataLoader(trainset, batch_size=batch_size, shuffle=True)
-        test_loader = DataLoader(testset, batch_size=batch_size, shuffle=True)
+            test_transform = datasets.modelfamily_to_transforms[modelfamily]['test']
+            try:
+                trainset = dataset(train=True, transform=test_transform)
+                print('=> Queryset size (training split) = {}'.format(len(trainset)))
+                testset = dataset(train=False, transform=test_transform)
+                print('=> Queryset size (test split) = {}'.format(len(testset)))
+            except TypeError as e:
+                trainset = dataset(split="train", transform=test_transform) # Augment data while training
+                print('=> Queryset size (training split) = {}'.format(len(trainset)))
+                testset = dataset(split="valid", transform=test_transform)
+                print('=> Queryset size (test split) = {}'.format(len(testset)))
 
-        total_train, correct_train = 0, 0
-        for images, labels in train_loader:
-            labels = labels.to(device)
-            y = blackbox(images)
-            _, predicted = y.max(1)
-            correct_train += predicted.eq(labels).sum().item()
-            total_train += labels.size(0)
-        print("=> Train accuracy: {:.2f}".format(correct_train/total_train))
-        total_val, correct_val = 0, 0
-        for images, labels in test_loader:
-            labels = labels.to(device)
-            y = blackbox(images)
-            _, predicted = y.max(1)
-            correct_val += predicted.eq(labels).sum().item()
-            total_val += labels.size(0)
-        print("=> Validation accuracy: {:.2f}".format(correct_val/total_val))
+            train_loader = DataLoader(trainset, batch_size=batch_size, shuffle=True)
+            test_loader = DataLoader(testset, batch_size=batch_size, shuffle=True)
 
+            total_train, correct_train = 0, 0
+            for images, labels in train_loader:
+                labels = labels.to(device)
+                y = blackbox(images)
+                _, predicted = y.max(1)
+                correct_train += predicted.eq(labels).sum().item()
+                total_train += labels.size(0)
+                total_input += labels.size(0)
+            print("=> Train accuracy: {:.2f}".format(correct_train/total_train))
+            total_val, correct_val = 0, 0
+            for images, labels in test_loader:
+                labels = labels.to(device)
+                y = blackbox(images)
+                _, predicted = y.max(1)
+                correct_val += predicted.eq(labels).sum().item()
+                total_val += labels.size(0)
+                total_input += labels.size(0)
+            print("=> Validation accuracy: {:.2f}".format(correct_val/total_val))
+
+        fpr = 100*blackbox.alarm_count/(total_input)
+
+        if fpr > target:
+            upper = thresh
+        else:
+            lower = thresh
+        print()
+
+    params["thresh"] = thresh
     params["num_detection"] = blackbox.alarm_count
-    params["false_positive_rate"] = f"{100*blackbox.alarm_count/(total_train+total_val)}%"
-    print(f"false positive rate: {100*blackbox.alarm_count/(total_train+total_val)}%")
+    params["total input"] = total_input
+    params["false_positive_rate"] = f"{100*blackbox.alarm_count/(total_input)}%"
+    print(f"false positive rate: {100*blackbox.alarm_count/total_input}%")
+    print(f"threshold: {thresh}")
     # Store arguments
     params_out_path = osp.join(log_dir, 'params_benign.json')
     with open(params_out_path, 'w') as jf:

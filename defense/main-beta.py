@@ -61,7 +61,7 @@ def main():
     # -------------------- Blackbox/Detector
     parser.add_argument("--blackbox_dir", metavar="PATH", type=str,
                         default="/mydata/model-extraction/model-extraction-defense/attack/victim/models/cifar10/wrn28_2")
-    parser.add_argument('--output_type', metavar='TYPE', type=str, help='Output type of Blackbox', default="one_hot")
+    parser.add_argument('--output_type', metavar='TYPE', type=str, help='Output type of Blackbox ["one_hot", "prob"]', default="one_hot")
     parser.add_argument("--T", metavar="TYPE", type=float, default=1.)
     parser.add_argument("--lpips", action="store_true")
     parser.add_argument("--encoder_arch_name", metavar="TYPE", type=str, default="simnet")
@@ -77,7 +77,9 @@ def main():
     parser.add_argument("--k", metavar="TYPE", type=int, default=1)
     parser.add_argument("--thresh", metavar="TYPE", type=float, help="detector threshold", default=0.16197727304697038)
     parser.add_argument('--adaptive_adv', action='store_true', help='Perform data augmentation', default=False)
-    
+    parser.add_argument('--binary_search', action='store_true', help='Perform data augmentation', default=False)
+    parser.add_argument("--foolbox_alg", metavar="TYPE", type=str, help="['pgd', 'cw_l2']" default="pgd")
+
     # -------------------- Other params
     parser.add_argument("--log_suffix", metavar="TYPE", type=str, default="testing")
     parser.add_argument("--out_root", metavar="PATH", type=str,
@@ -242,11 +244,14 @@ def main():
     sigma = params['sigma']
     policy = params['policy']
     ema_decay = params['ema_decay']
+    binary_search = params['binary_search']
+    foolbox_alg = params['foolbox_alg']
 
     random_adv = True if params['random_adv'] else False
     adv_transform = True if params['adv_transform'] else False
     adversary = JacobianAdversary(blackbox, budget, model_adv_name, model_adv_pretrained, modelfamily, seedset,
-                                  testset, device, ckp_out_root, batch_size=batch_size, ema_decay=ema_decay, detector=detector_adv, binary_search=True,
+                                  testset, device, ckp_out_root, batch_size=batch_size, ema_decay=ema_decay, 
+                                  detector=detector_adv, binary_search=binary_search, foolbox_alg=foolbox_alg,
                                   eps=eps, num_steps=num_steps, train_epochs=train_epochs, kappa=kappa, tau=tau, rho=rho, take_lastk=take_lastk,
                                   sigma=sigma, random_adv=random_adv, adv_transform=adv_transform, aug_strategy=policy)
 

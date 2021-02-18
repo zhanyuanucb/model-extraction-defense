@@ -66,18 +66,31 @@
 #                      -l CIFAR10 CINIC10\
 #                      --device_id=1
 
-#encoder_arch_name="vgg16_bn"                      
-#encoder_suffix=""
+encoder_arch_name="vgg16_bn"                      
+encoder_suffix=""
 #thresh=1.25
-encoder_arch_name="simnet"                      
-encoder_suffix="_ep30"
-thresh=0.2
+#encoder_arch_name="simnet"                      
+#encoder_suffix="_ep30"
 CUDA_VISIBLE_DEVICES=1 python benign_user.py \
                       --encoder_arch_name=$encoder_arch_name \
                       --encoder_margin=3.2 \
                       --encoder_suffix=$encoder_suffix \
-                      --thresh=$thresh \
+                      --lower=1e-3 \
+                      --upper=3. \
                       --k=1 \
                       --log_suffix=$encoder_arch_name \
-                      -l CIFAR10 CINIC10\
+                      -l CINIC10 CIFAR10 \
                       --device_id=1
+                      
+encoder_arch_name="simnet"                      
+encoder_suffix="_ep30"
+CUDA_VISIBLE_DEVICES=1 python benign_user.py \
+                      --encoder_arch_name=$encoder_arch_name \
+                      --encoder_margin=3.2 \
+                      --encoder_suffix=$encoder_suffix \
+                      --lower=1e-3 \
+                      --upper=3. \
+                      --k=1 \
+                      --log_suffix=$encoder_arch_name \
+                      -l CIFAR10 CINIC10 \
+                      --device_id=1                     

@@ -26,6 +26,7 @@ import torchvision
 
 import foolbox
 from foolbox.attacks import LinfPGD as PGD
+from foolbox.attacks import L2CarliniWagnerAttack
 from foolbox.criteria import Misclassification, TargetedMisclassification
 
 from attack import datasets
@@ -52,7 +53,7 @@ class JacobianAdversary:
     2. (JB-{topk, self}) "PRADA: Protecting against DNN Model Stealing Attacks", Juuti et al., Euro S&P '19
     """
     def __init__(self, blackbox, budget, model_adv_name, model_adv_pretrained, modelfamily, seedset, testset, device,
-                 out_dir, batch_size=cfg.DEFAULT_BATCH_SIZE, ema_decay=-1, detector=None, binary_search=False,
+                 out_dir, batch_size=cfg.DEFAULT_BATCH_SIZE, ema_decay=-1, detector=None, binary_search=False, foolbox_alg="pgd",
                  eps=0.1, num_steps=8, train_epochs=20, kappa=400, tau=None, rho=6, sigma=-1, take_lastk=-1,
                  query_batch_size=1, random_adv=False, adv_transform=False, aug_strategy='jbda', useprobs=True, final_train_epochs=100):
         self.blackbox = blackbox
@@ -78,6 +79,7 @@ class JacobianAdversary:
         self.sigma = sigma
         self.take_lastk = take_lastk
         self.binary_search = binary_search
+        self.foolbox_alg=foolbox_alg
         self.device = device
         self.MEAN, self.STD = cfg.NORMAL_PARAMS[modelfamily]
         self.MEAN, self.STD = torch.Tensor(self.MEAN), torch.Tensor(self.STD)
@@ -241,7 +243,7 @@ class JacobianAdversary:
                 elif self.aug_strategy == 'jbtop{}'.format(self.topk):
                     self.D = self.jacobian_augmentation_topk(model_adv, rho_current, step_size=self.eps, num_steps=self.num_steps,
                                                              take_lastk=self.take_lastk, use_foolbox=False, binary_search=self.binary_search)
-                elif self.aug_strategy == 'foolbox_adv{}'.format(self.topk):
+                elif self.aug_strategy == 'pgdtop{}'.format(self.topk):
                     self.D = self.jacobian_augmentation_topk(model_adv, rho_current, step_size=self.eps, num_steps=self.num_steps,
                                                              take_lastk=self.take_lastk, use_foolbox=True)
                 else:
@@ -446,8 +448,8 @@ class JacobianAdversary:
 
             for c in Y_pred_sorted[:self.topk]:
                 if use_foolbox:
-                    delta_i = self.foolbox_linf_targ(model_adv, X, Y.argmax(dim=1), c, epsilon=step_size, alpha=0.01,
-                                                 device=self.device)
+                    delta_i = self.foolbox_targ(model_adv, X, Y.argmax(dim=1), c, epsilon=step_size, alpha=0.01,
+                                                 device=self.device, attack_alg=self.foolbox_alg)
                 if binary_search:
                     delta_i = self.binary_search_linf_targ(model_adv, self.blackbox, X, Y.argmax(dim=1), c,
                                                   epsilon=step_size, alpha=0.01, device=self.device)
@@ -587,8 +589,14 @@ class JacobianAdversary:
                 delta.grad.zero_()
             return delta.detach()
 
-    def foolbox_linf_targ(self, model, inputs, targets, y_targ, epsilon, alpha, device, num_iter=8):
-        attack = PGD(abs_stepsize=2*epsilon/num_iter)
+    def foolbox_targ(self, model, inputs, targets, y_targ, epsilon, alpha, device, num_iter=8, attack_alg="pgd"):
+        if attack_alg=="pgd":
+            attack = PGD(abs_stepsize=2*epsilon/num_iter)
+        elif attack_alg=="cw_l2":
+            attack = L2CarliniWagnerAttack()
+        else:
+            raise ValueError("Supported attack alg: ['pgd', 'cw_l2']")
+        print(attack)
         inputs = inputs.to(device)
 
         images = self.denormalize(inputs)
@@ -616,29 +624,29 @@ class JacobianAdversary:
             #print(torch.dist(images, inputs, 2))
             #print(torch.dist(images_b, inputs, 2))
             #print(torch.dist(images_b, images, 2))
-            with torch.no_grad():
-            #    #adv_feat_b = self.detector_adv.encoder(images_b)
-            #    #adv_feat = self.detector_adv.encoder(images)
+            #with torch.no_grad():
+            ##    #adv_feat_b = self.detector_adv.encoder(images_b)
+            ##    #adv_feat = self.detector_adv.encoder(images)
 
-                vic_feat_b = self.blackbox.encoder(images_b)
-                vic_feat = self.blackbox.encoder(images)
-                vic_feat_ori = self.blackbox.encoder(inputs)
+            #    vic_feat_b = self.blackbox.encoder(images_b)
+            #    vic_feat = self.blackbox.encoder(images)
+            #    vic_feat_ori = self.blackbox.encoder(inputs)
 
-            #    #print(torch.dist(adv_feat_b, adv_feat, 2))
-            #    print(torch.dist(vic_feat, vic_feat_ori, 2))
-            #    print(torch.dist(vic_feat_b, vic_feat_ori, 2))
-            #    print(torch.dist(vic_feat_b, vic_feat, 2))
-            #import ipdb; ipdb.set_trace()
-            self.images2inputs.append(torch.dist(images, inputs, 2).item())
-            self.imagesb2inputs.append(torch.dist(images_b, inputs, 2).item())
+            ##    #print(torch.dist(adv_feat_b, adv_feat, 2))
+            ##    print(torch.dist(vic_feat, vic_feat_ori, 2))
+            ##    print(torch.dist(vic_feat_b, vic_feat_ori, 2))
+            ##    print(torch.dist(vic_feat_b, vic_feat, 2))
+            ##import ipdb; ipdb.set_trace()
+            #self.images2inputs.append(torch.dist(images, inputs, 2).item())
+            #self.imagesb2inputs.append(torch.dist(images_b, inputs, 2).item())
 
-            self.feat2feat_org.append(torch.dist(vic_feat, vic_feat_ori, 2).item()) 
-            self.feat2feat_b.append(torch.dist(vic_feat_b, vic_feat_ori, 2).item())
+            #self.feat2feat_org.append(torch.dist(vic_feat, vic_feat_ori, 2).item()) 
+            #self.feat2feat_b.append(torch.dist(vic_feat_b, vic_feat_ori, 2).item())
 
-            torch.save(self.images2inputs, "./images2inputs.pylist")
-            torch.save(self.imagesb2inputs, "./images2binputs.pylist")
-            torch.save(self.feat2feat_org, "./feat2feat_org.pylist")
-            torch.save(self.feat2feat_b, "./feat2feat_b.pylist")
+            #torch.save(self.images2inputs, "./images2inputs.pylist")
+            #torch.save(self.imagesb2inputs, "./images2binputs.pylist")
+            #torch.save(self.feat2feat_org, "./feat2feat_org.pylist")
+            #torch.save(self.feat2feat_b, "./feat2feat_b.pylist")
         else:
             delta = images - inputs
         return delta
@@ -647,10 +655,14 @@ class JacobianAdversary:
         attempts = 0
         with torch.no_grad():
             while True:
+
                 mid = (x1+x2)/2
                 attempts += 1                        
 
                 if attempts > max_attempts:
+                    return mid
+
+                if self.blackbox.call_count >= self.budget:
                     return mid
 
                 Y = model(mid)
