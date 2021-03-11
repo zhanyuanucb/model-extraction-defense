@@ -11,6 +11,7 @@ import os
 import pickle
 import json
 from datetime import datetime
+import time
 import re
 
 import numpy as np
@@ -90,14 +91,14 @@ class JacobianAdversary:
         self.out_dir = out_dir
         self.num_classes = len(self.testset.classes)
         self.random_adv = random_adv
-        assert (aug_strategy in ['jbda', 'jbself']) or 'jbtop' in aug_strategy or 'foolbox_adv' in aug_strategy
+        assert (aug_strategy in ['jbda', 'jbself']) or 'jbtop' in aug_strategy or 'fbtop' in aug_strategy
         self.aug_strategy = aug_strategy
         self.topk = 0
         if 'jbtop' in aug_strategy:
             # extract k from "jbtop<k>"
             self.topk = int(aug_strategy.replace('jbtop', ''))
-        if 'foolbox_adv' in aug_strategy:
-            self.topk = int(aug_strategy.replace('foolbox_adv', ''))
+        if 'fbtop' in aug_strategy:
+            self.topk = int(aug_strategy.replace('fbtop', ''))
 
         self.accuracies = []  # Track test accuracies over time
         self.useprobs = useprobs
@@ -243,15 +244,17 @@ class JacobianAdversary:
                 elif self.aug_strategy == 'jbtop{}'.format(self.topk):
                     self.D = self.jacobian_augmentation_topk(model_adv, rho_current, step_size=self.eps, num_steps=self.num_steps,
                                                              take_lastk=self.take_lastk, use_foolbox=False, binary_search=self.binary_search)
-                elif self.aug_strategy == 'pgdtop{}'.format(self.topk):
+                elif self.aug_strategy == 'fbtop{}'.format(self.topk):
+#                    self.D = self.jacobian_augmentation_topk(model_adv, rho_current, step_size=self.eps, num_steps=self.num_steps,
+#                                                             take_lastk=self.take_lastk, use_foolbox=True)
                     self.D = self.jacobian_augmentation_topk(model_adv, rho_current, step_size=self.eps, num_steps=self.num_steps,
-                                                             take_lastk=self.take_lastk, use_foolbox=True)
+                                                             take_lastk=self.take_lastk, use_foolbox=True, use_feature_fool=True)
                 else:
                     raise ValueError('Unrecognized augmentation strategy: "{}"'.format(self.aug_strategy))
 
                 # -------------------------- 4. End if necessary
                 rho_current += 1
-                torch.save(self.blackbox.query_dist, osp.join(self.out_dir, "query_dist.pt"))
+                #torch.save(self.blackbox.query_dist, osp.join(self.out_dir, "query_dist.pt"))
                 if (self.blackbox.call_count >= self.budget) or ((self.rho is not None) and (rho_current >= self.rho)):
                     print('=> # BB Queries ({}) >= budget ({}). Ending attack.'.format(self.blackbox.call_count,
                                                                                        self.budget))
@@ -386,7 +389,8 @@ class JacobianAdversary:
 
         return D_augmented
 
-    def jacobian_augmentation_topk(self, model_adv, rho_current, step_size=0.1, num_steps=8, take_lastk=-1, use_foolbox=False, binary_search=False):
+    def jacobian_augmentation_topk(self, model_adv, rho_current, step_size=0.1, num_steps=8, 
+                                         take_lastk=-1, use_foolbox=False, binary_search=False, use_feature_fool=False):
         if (self.kappa is not None) and (rho_current >= self.sigma):
             D_sampled = self.rand_sample(self.D, self.kappa)
         elif take_lastk > 0:
@@ -448,15 +452,22 @@ class JacobianAdversary:
 
             for c in Y_pred_sorted[:self.topk]:
                 if use_foolbox:
-                    delta_i = self.foolbox_targ(model_adv, X, Y.argmax(dim=1), c, epsilon=step_size, alpha=0.01,
-                                                 device=self.device, attack_alg=self.foolbox_alg)
-                if binary_search:
+                    if use_feature_fool:
+                        delta_i = self.feature_fool(model_adv, X, Y.argmax(dim=1), c, epsilon=step_size, alpha=0.01, device=self.device, num_iter=25)
+                    else:
+                        delta_i = self.foolbox_targ(model_adv, X, Y.argmax(dim=1), c, epsilon=step_size, alpha=0.01,
+                                                     device=self.device, attack_alg=self.foolbox_alg)
+
+                elif binary_search:
                     delta_i = self.binary_search_linf_targ(model_adv, self.blackbox, X, Y.argmax(dim=1), c,
                                                   epsilon=step_size, alpha=0.01, device=self.device)
                 else:
                     delta_i = self.pgd_linf_targ(model_adv, X, Y.argmax(dim=1), c, epsilon=step_size, alpha=0.01,
                                              device=self.device)
 
+                if delta_i is None:
+                    num_skips += 1
+                    continue
 
                 x_aug = X + delta_i
                 """
@@ -527,10 +538,16 @@ class JacobianAdversary:
         print("Untargeted:")
         msg = f"{adv2bb}/{(i+1)*self.topk} ({int(100*adv2bb/((i+1)*self.topk))})%"
         print(msg+" are adversarial to the victim")
+        self._write_log(msg+" are adversarial to the victim")
+
         msg2 = f"{adv2adv}/{(i+1)*self.topk} ({int(100*adv2adv/((i+1)*self.topk))})%"
         print(msg2+" are adversarial to the adversary")
+        self._write_log(msg2+" are adversarial to the adversary")
+
         msg3 = f"{adv2both}/{(i+1)*self.topk} ({int(100*adv2both/((i+1)*self.topk))})%"
         print(msg3+" are adversarial to both")
+        self._write_log(msg3+" are adversarial to both")
+
         if self.log_path:
             self._write_log("Untargeted:")
             self._write_log("\t".join([msg, msg2, msg3]))
@@ -548,6 +565,7 @@ class JacobianAdversary:
             self._write_log("Targeted:")
             self._write_log("\t".join([msg, msg2, msg3]))
             self._write_log_table(adv2both_t, adv2bb_t, adv2adv_t, total)
+            self._write_log(f"skip: {num_skips}/{total}")
         return D_augmented
 
     @staticmethod
@@ -593,16 +611,19 @@ class JacobianAdversary:
         if attack_alg=="pgd":
             attack = PGD(abs_stepsize=2*epsilon/num_iter)
         elif attack_alg=="cw_l2":
-            attack = L2CarliniWagnerAttack()
+            attack = L2CarliniWagnerAttack(steps=100)
         else:
             raise ValueError("Supported attack alg: ['pgd', 'cw_l2']")
-        print(attack)
+        #print(f"Start attack by {attack}...")
         inputs = inputs.to(device)
 
         images = self.denormalize(inputs)
         adv_criterion = TargetedMisclassification(y_targ[None])
         fmodel = foolbox.models.PyTorchModel(model, bounds=(0, 1), preprocessing={"mean":self.MEAN.to(device), "std":self.STD.to(device)})
+        #tic = time.time()
         _, images, is_adv = attack(fmodel, images, criterion=adv_criterion, epsilons=8./256)
+        #tac = time.time()
+        #print(f"cw_l2 takes {(tac-tic)//60}mins")
         images = self.normalize(images)
 
         delta = images - inputs
@@ -648,7 +669,7 @@ class JacobianAdversary:
             #torch.save(self.feat2feat_org, "./feat2feat_org.pylist")
             #torch.save(self.feat2feat_b, "./feat2feat_b.pylist")
         else:
-            delta = images - inputs
+            return None
         return delta
 
     def boundary_search(self, model, x1, y1, x2, y2, thresh, max_attempts=1000):
@@ -676,3 +697,42 @@ class JacobianAdversary:
                     x1 = mid
                 elif pred_mid == y2:
                     x2 = mid                    
+
+    def feature_fool(self, model, inputs, targets, y_targ, epsilon, alpha, device, num_iter=8):
+        """ Construct targeted adversarial examples on the examples X"""
+        attack = PGD(abs_stepsize=2*epsilon/num_iter)
+        inputs = inputs.to(device)
+
+        images = self.denormalize(inputs)
+        adv_criterion = TargetedMisclassification(y_targ[None])
+        fmodel = foolbox.models.PyTorchModel(model, bounds=(0, 1), preprocessing={"mean":self.MEAN.to(device), "std":self.STD.to(device)})
+        _, images, is_adv = attack(fmodel, images, criterion=adv_criterion, epsilons=0.1)
+        images = self.normalize(images)
+
+        if is_adv:
+            alpha = 2*epsilon/num_iter
+            source_input, target_input = inputs, images
+            with torch.enable_grad():
+                delta = torch.zeros_like(inputs, requires_grad=True).to(device)
+                source_input, target_input = source_input.to(device), target_input.to(device)
+
+                target_feature = model.features(target_input)
+                target_feature = target_feature.view(target_feature.size(0), -1)
+
+                source_feature = model.features(source_input)
+                source_feature = source_feature.view(source_feature.size(0), -1)
+
+                # TODO: calculate margin
+                triplet_loss = torch.nn.TripletMarginLoss()
+                for _ in range(num_iter):
+                    delta_feature= model.features(source_input+delta)
+
+                    loss = triplet_loss(delta_feature, target_feature, source_feature)
+                                         # anchor         # positive      # negative
+
+                    loss.backward(retain_graph=True)
+                    delta.data = (delta + alpha * delta.grad.detach().sign()).clamp(-epsilon, epsilon)
+                    delta.grad.zero_()
+            return delta.detach()
+        else:
+            return None

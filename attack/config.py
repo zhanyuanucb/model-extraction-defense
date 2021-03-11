@@ -48,6 +48,8 @@ MNIST_STD = (0.3081,)
 DEFAULT_BATCH_SIZE = 64
 
 NORMAL_PARAMS = {"cifar": (CIFAR_MEAN, CIFAR_STD),
+                 "cifar_jb": (CIFAR_MEAN, CIFAR_STD),
                  "cinic10": (CINIC_MEAN, CINIC_STD),
                  "imagenet": (IMAGENET_MEAN, IMAGENET_STD),
+                 "imagenet_jb": (IMAGENET_MEAN, IMAGENET_STD),
                  "mnist": (MNIST_MEAN, MNIST_STD)}

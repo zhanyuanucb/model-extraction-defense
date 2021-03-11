@@ -2,18 +2,18 @@ from torchvision import transforms
 from torch import nn
 import kornia.augmentation as kaug
 
-#from knockoff.datasets.caltech256 import Caltech256
-from attack.datasets.cifarlike import CIFAR10, CIFAR100, SVHN
-#from knockoff.datasets.cubs200 import CUBS200
 #from knockoff.datasets.diabetic5 import Diabetic5
 import sys
 sys.path.append('/mydata/model-extraction/model-extraction-defense/')
+from attack.datasets.caltech256 import Caltech256
+from attack.datasets.cubs200 import CUBS200
+from attack.datasets.cifarlike import CIFAR10, CIFAR100, SVHN
 from attack.datasets.imagenet1k import ImageNet1k
 from attack.datasets.imagenet32 import ImageNet32
 from attack.datasets.cinic10 import CINIC10
-#from knockoff.datasets.indoor67 import Indoor67
+from attack.datasets.indoor67 import Indoor67
 from attack.datasets.mnistlike import MNIST, KMNIST, EMNIST, EMNISTLetters, FashionMNIST
-#from knockoff.datasets.tinyimagenet200 import TinyImageNet200
+from attack.datasets.tinyimagenet200 import TinyImageNet200
 
 # Create a mapping of dataset -> dataset_type
 # This is helpful to determine which (a) family of model needs to be loaded e.g., imagenet and
@@ -30,15 +30,21 @@ dataset_to_modelfamily = {
     'CIFAR10': 'cifar',
     'CIFAR100': 'cifar',
     'SVHN': 'cifar',
-    'TinyImageNet200': 'cifar',
+    #'TinyImageNet200': 'cifar',
+    'TinyImageNet200': 'cifar_jb',
 
     # Imagenet
-    'CUBS200': 'imagenet',
-    'Caltech256': 'imagenet',
-    'Indoor67': 'imagenet',
-    'Diabetic5': 'imagenet',
-    'ImageNet1k': 'imagenet',
-    'ImageNet32': 'imagenet32',
+    #'CUBS200': 'imagenet',
+    #'Caltech256': 'imagenet',
+    #'Indoor67': 'imagenet',
+    #'Diabetic5': 'imagenet',
+    #'ImageNet1k': 'imagenet',
+
+    'CUBS200': 'imagenet_jb',
+    'Caltech256': 'imagenet_jb',
+    'Indoor67': 'imagenet_jb',
+    'Diabetic5': 'imagenet_jb',
+    'ImageNet1k': 'imagenet_jb',
 
     # CINIC10
     'CINIC10': "cinic10"
@@ -88,14 +94,23 @@ modelfamily_to_transforms = {
 
         'test2': transforms.ToTensor(),
 
-        'train_kornia': nn.Sequential(kaug.RandomHorizontalFlip(p=0.5),
-                                      kaug.RandomResizedCrop((32, 32)),
-                                      kaug.RandomRotation(degrees=60),
-                                      kaug.ColorJitter(brightness=0.5),
-                                      kaug.ColorJitter(brightness=0.55)
-                                      ),
+    },
+    'cifar_jb': {
+        'train': transforms.Compose([
+            transforms.Resize(32),
+            transforms.RandomCrop(32, padding=4),
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=(0.4914, 0.4822, 0.4465),
+                                 std=(0.2023, 0.1994, 0.2010)),
+        ]),
+        'test': transforms.Compose([
+            transforms.Resize(32),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=(0.4914, 0.4822, 0.4465),
+                                 std=(0.2023, 0.1994, 0.2010)),
+        ]),
 
-        'test_kornia': lambda x: x
     },
 
     'imagenet': {
@@ -112,11 +127,12 @@ modelfamily_to_transforms = {
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                  std=[0.229, 0.224, 0.225]),
-        ])
+        ]),
     },
 
-    'imagenet32': {
+    'imagenet_jb': {
         'train': transforms.Compose([
+            transforms.Resize(37),
             transforms.RandomResizedCrop(32),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
@@ -124,6 +140,8 @@ modelfamily_to_transforms = {
                                  std=[0.229, 0.224, 0.225]),
         ]),
         'test': transforms.Compose([
+            transforms.Resize(37),
+            transforms.CenterCrop(32),
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                  std=[0.229, 0.224, 0.225]),

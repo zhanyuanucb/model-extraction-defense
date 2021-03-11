@@ -35,12 +35,13 @@ __status__ = "Development"
 gpu_count = torch.cuda.device_count()
 
 class Blackbox(object):
-    def __init__(self, model, output_type="one_hot", T=1):
-        self.model = model
+    def __init__(self, model, device=None, output_type="one_hot", T=1):
+        self.model = model.to(device)
         self.model.eval()
-        self.output_type = output_type
+        self.output_type = output_type # ["one_hot", "logits", "prob"]
         self.T = T
         self.call_count = 0
+        self.device = device
 
     @classmethod
     def from_modeldir(cls, model_dir, device=None, output_type="one_hot", T=1):
@@ -80,6 +81,9 @@ class Blackbox(object):
         images = images.to(self.device)
         with torch.no_grad():
             logits = self.model(images)
+        if self.output_type == "logits":
+            return logits
+
         topk_vals, indices = torch.topk(logits, 1)
         y = torch.zeros_like(logits)
 
@@ -91,3 +95,6 @@ class Blackbox(object):
 
     def eval(self):
         self.model.eval()
+
+    def to(self, device):
+        return self.model.to(device)

@@ -10,9 +10,11 @@ import modelzoo.imagenet
 
 
 def get_net(modelname, modeltype, pretrained=None, **kwargs):
-    assert modeltype in ('mnist', 'cifar', 'imagenet', 'imagenet32', 'cinic10')
-    if modeltype == 'imagenet32' or 'cinic10':
+    assert modeltype in ('mnist', 'cifar', 'imagenet', 'imagenet32', 'cinic10', 'cifar_jb', 'imagenet_jb')
+    if modeltype in ['imagenet32', 'cinic10', 'cifar_jb']:
         modeltype = 'cifar'
+    elif modeltype in ['imagenet_jb', 'cifar_jb']:
+        modeltype = 'imagenet'
     if pretrained and pretrained is not None:
         return get_pretrainednet(modelname, modeltype, pretrained, **kwargs)
     else:

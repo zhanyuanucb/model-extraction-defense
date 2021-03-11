@@ -50,6 +50,7 @@ class AdvDetector:
     
     def init(self, device, time=None, output_type="one_hot", T=1.):
         self.device = device
+        self.encoder = self.encoder.to(device)
         self.MEAN = self.MEAN.to(self.device)
         self.STD = self.STD.to(self.device)
     

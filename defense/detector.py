@@ -53,7 +53,12 @@ class Detector:
         self.device = device
         self.MEAN = self.MEAN.to(self.device)
         self.STD = self.STD.to(self.device)
-        self.blackbox = Blackbox.from_modeldir(blackbox_dir, device, output_type=output_type, T=T)
+        try:
+            print("Load from model dir")
+            self.blackbox = Blackbox.from_modeldir(blackbox_dir, device, output_type=output_type, T=T)
+        except:
+            print("Load from model")
+            self.blackbox = Blackbox(blackbox_dir, device, output_type=output_type, T=T)
         self._init_log(time)
     
     def _process(self, images):
@@ -128,12 +133,12 @@ class Detector:
             columns = [str(self.call_count), f"{self.memory_size}/{self.memory_capacity}", str(self.detection_count // self.num_clusters), str(detected_dist)]
             log.write('\t'.join(columns) + '\n')
     
-    def __call__(self, images):
+    def __call__(self, images, is_adv=False):
         images = images.to(self.device)
         # ---- Going through detection
         is_adv = self._process(images)
         # ----------------------------
-        output = self.blackbox(images)
+        output = self.blackbox(images, is_adv=is_adv)
         return output
 
     def eval(self):

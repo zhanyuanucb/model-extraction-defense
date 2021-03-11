@@ -78,7 +78,7 @@ def main():
     parser.add_argument("--thresh", metavar="TYPE", type=float, help="detector threshold", default=0.16197727304697038)
     parser.add_argument('--adaptive_adv', action='store_true', help='Perform data augmentation', default=False)
     parser.add_argument('--binary_search', action='store_true', help='Perform data augmentation', default=False)
-    parser.add_argument("--foolbox_alg", metavar="TYPE", type=str, help="['pgd', 'cw_l2']" default="pgd")
+    parser.add_argument("--foolbox_alg", metavar="TYPE", type=str, help="['pgd', 'cw_l2']", default="pgd")
 
     # -------------------- Other params
     parser.add_argument("--log_suffix", metavar="TYPE", type=str, default="testing")
@@ -97,11 +97,12 @@ def main():
     else:
         device = torch.device('cpu')
 
-    params['created_on'] = str(datetime.now()).replace(' ', '_')[:19]
+    params['created_on'] = str(datetime.now()).replace(' ', '_')[:19].replace(":", "-")
+    log_suffix = params["log_suffix"]
     created_on = params['created_on']
     out_root = params["out_root"]
 
-    ckp_out_root = osp.join(out_root, created_on)
+    ckp_out_root = osp.join(out_root, created_on+"-"+log_suffix)
     if not osp.exists(ckp_out_root):
         os.mkdir(ckp_out_root)
 
@@ -126,7 +127,10 @@ def main():
     if params['train_transform']:
         print('=> Using data augmentation while querying')
     transform = datasets.modelfamily_to_transforms[modelfamily][transform_type]
-    queryset = datasets.__dict__[queryset_name](train=True, transform=transform)
+    try:
+        queryset = datasets.__dict__[queryset_name](train=True, transform=transform)
+    except TypeError as e:
+        queryset = datasets.__dict__[queryset_name](split="train", transform=transform)
 
     # Use a subset of queryset
     subset_idxs = np.random.choice(range(len(queryset)), size=params['seedsize'], replace=False)
@@ -135,9 +139,9 @@ def main():
     # ----------- Initialize Detector
     k = params["k"]
     thresh = params["thresh"]
-    log_suffix = params["log_suffix"]
     log_dir = ckp_out_root
     MEAN, STD = cfg.NORMAL_PARAMS[modelfamily]
+    modelfamily = "cifar" # Performing Jbtop3 on several datasets
 
     use_lpips = params["lpips"]
     blackbox_dir = params["blackbox_dir"]
@@ -189,6 +193,7 @@ def main():
     #encoder_adv = copy.deepcopy(encoder)
     detector_adv = None
     if params["adaptive_adv"]:
+        print("=> Setting up adaptive encoder...")
         adv_encoder = zoo.get_net("vgg16_bn", modelfamily, num_classes=num_classes)
         adv_encoder.fc = IdLayer().to(device)
         adv_encoder_ckp = "/mydata/model-extraction/model-extraction-defense/defense/similarity_encoding/vgg16_bn/CINIC10-margin-3.2/checkpoint.sim-3.2.pth.tar"
@@ -199,9 +204,8 @@ def main():
         adv_encoder.load_state_dict(checkpoint['state_dict'])
         print("===> loaded checkpoint (epoch {})".format(checkpoint['epoch']))
         #encoder.fc = IdLayer(activation=activation)
-        adv_encoder = encoder.to(device)
         adv_encoder.eval()
-        detector_adv = AdvDetector(k, 1.25, adv_encoder, MEAN, STD, log_suffix="adv_encoder", log_dir=log_dir)
+        detector_adv = AdvDetector(k, 0.8210390624999999, adv_encoder, MEAN, STD, log_suffix="adv_encoder", log_dir=log_dir)
         detector_adv.init(device)
 
     # ----------- Initialize Adversary
@@ -270,8 +274,8 @@ def main():
     with open(params_out_path, 'w') as jf:
         json.dump(params, jf, indent=True)
 
-    query_dist_out_path = osp.join(ckp_out_root, 'query_dist.pt')
-    torch.save(blackbox.query_dist, query_dist_out_path)
+    #query_dist_out_path = osp.join(ckp_out_root, 'query_dist.pt')
+    #torch.save(blackbox.query_dist, query_dist_out_path)
 
 if __name__ == '__main__':
     main()
