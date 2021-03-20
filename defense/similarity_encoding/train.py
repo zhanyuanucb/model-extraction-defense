@@ -22,6 +22,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Subset
 import torchvision
 from torchvision.datasets import VisionDataset
 import torchvision.datasets as tvdatasets
@@ -78,7 +79,7 @@ def main():
     args = parser.parse_args()
     params = vars(args)
 
-    feat_out_path = osp.join(params['out_dir'], "feat_extractor", f"{params['dataset_name']}-{params['model_name']}")
+    feat_out_path = osp.join(params['out_dir'], "feat_extractor", f"{params['dataset_name']}-{params['model_name']}-{params['model_suffix']}")
     attack_utils.create_dir(feat_out_path)
 
     #torch.manual_seed(cfg.DEFAULT_SEED)
@@ -111,6 +112,15 @@ def main():
     except TypeError as e:
         trainset = datasets.__dict__[dataset_name](split="train", transform=train_transform) # Augment data while training
         valset = datasets.__dict__[dataset_name](split="valid", transform=test_transform)
+    from sklearn.model_selection import train_test_split
+    ##########################################
+    # Using seed images
+    ##########################################
+    trainset_full = trainset
+    seed_idx = np.random.choice(range(len(trainset)), size=5000, replace=False)
+    train_idx, val_idx = train_test_split(seed_idx, test_size=0.1, random_state=42)
+    trainset = Subset(trainset_full, train_idx)
+    valset = Subset(trainset_full, val_idx)
 
     model_name = params['model_name']
     num_classes = params['num_classes']
@@ -161,6 +171,15 @@ def main():
         sim_trainset = PositiveNegativeImageSet(train_dir, normal_transform=test_transform, random_transform=random_transform)
 
         sim_valset = PositiveNegativeImageSet(test_dir, normal_transform=test_transform, random_transform=random_transform)
+
+    ################################
+    # Adversary only use seed images
+    ################################
+    sim_trainset.data, sim_trainset.targets = np.transpose(trainset.dataset.data[trainset.indices], (0, 3, 1, 2)), [trainset.dataset.targets[idx] for idx in trainset.indices]
+    sim_trainset.n_samples = sim_trainset.data.shape[0]
+
+    sim_valset.data, sim_valset.targets = np.transpose(valset.dataset.data[valset.indices], (0, 3, 1, 2)), [valset.dataset.targets[idx] for idx in valset.indices]
+    sim_valset.n_samples = sim_valset.data.shape[0]
 
 
     #blinders_dir = params["blinders_dir"]

@@ -25,18 +25,32 @@
 #                --model_suffix=$model_suffix \
 #                --margin=$margin \
 #                -d 0              
-                
-model_name="vgg16_bn"
+
+model_name="simnet"
 margin=10
-model_suffix=""
-CUDA_VISIBLE_DEVICES=1 python train.py \
+model_suffix="adv_seed5000"
+CUDA_VISIBLE_DEVICES=0 python train.py \
+                --load_pretrained \
+                --ckp_dir=/mydata/model-extraction/model-extraction-defense/defense/similarity_encoding/feat_extractor/CIFAR10-simnet-adv_seed5000 \
+                --ckpt_suffix=".adv_feat_simnet" \
                 --sim_epochs=30 \
                 --sim_norm \
-                --dataset_name=CINIC10 \
                 --model_name=$model_name \
                 --model_suffix=$model_suffix \
                 --margin=$margin \
-                -d 1                             
+                -d 0              
+               
+#model_name="vgg16_bn"
+#margin=10
+#model_suffix=""
+#CUDA_VISIBLE_DEVICES=1 python train.py \
+#                --sim_epochs=30 \
+#                --sim_norm \
+#                --dataset_name=CINIC10 \
+#                --model_name=$model_name \
+#                --model_suffix=$model_suffix \
+#                --margin=$margin \
+#                -d 1                             
                 
 #CUDA_VISIBLE_DEVICES=1 python pick_thresh.py \
 #                       --dataset_name=CIFAR10 \

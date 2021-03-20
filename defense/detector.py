@@ -26,7 +26,7 @@ from attack.victim.blackbox import Blackbox
 
 class Detector:
     def __init__(self, k, thresh, encoder, mean, std, 
-                 num_clusters=50, buffer_size=1000, memory_capacity=10000,
+                 num_clusters=50, buffer_size=1000, memory_capacity=100000,
                  log_suffix="", log_dir="./"):
         self.blackbox = None
         self.call_count = 0
@@ -44,6 +44,7 @@ class Detector:
         self.memory_capacity = memory_capacity
         self.memory_size = 0
         self.query_dist = []
+        print(f"=> Detector params:\n  k={k}\n  num_cluster={num_clusters}\n thresh={thresh}")
 
         # Debug
         #self.log_dir = log_dir
@@ -95,6 +96,8 @@ class Detector:
         k_avg_dist = np.mean(k_nearest_dists)
         #print(self.query_count, k_avg_dist)
         self.query_dist.append(k_avg_dist)
+        # dist to random queries in history
+        #self.query_dist.append(dists[np.random.randint(len(dists))])
 
         self.buffer.append(query)
         self.call_count += 1
@@ -143,3 +146,10 @@ class Detector:
 
     def eval(self):
         self.blackbox.eval()
+
+
+class VAEDetector:
+    def __init__(self, k, thresh, encoder, mean, std, 
+                 num_clusters=50, buffer_size=1000, memory_capacity=100000,
+                 log_suffix="", log_dir="./"):
+        super(VAEDetector, self).__init__()

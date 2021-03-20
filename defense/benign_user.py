@@ -43,6 +43,8 @@ def main():
     parser.add_argument('--activation', metavar='TYPE', type=str, help='Activation name', default=None)
     parser.add_argument("--k", metavar="TYPE", type=int, default=1)
     parser.add_argument("--target", metavar="TYPE", type=float, help="targeted FPR", default=1e-2)
+    parser.add_argument("--input_thresh", metavar="TYPE", type=float, help="test threshold", default=1e-2)
+    parser.add_argument("--thresh_search", action="store_true")
     parser.add_argument("--lower", metavar="TYPE", type=float, help="binary search lowerbound", default=1e-3)
     parser.add_argument("--upper", metavar="TYPE", type=float, help="binary search upperbound", default=2.)
     parser.add_argument("--log_suffix", metavar="TYPE", type=str, default="benign")
@@ -67,7 +69,7 @@ def main():
     log_dir = params["log_dir"]
     use_lpips = params["lpips"]
     created_on = str(datetime.now()).replace(' ', '_')[:19]
-    log_dir = osp.join(log_dir, created_on)
+    log_dir = osp.join(log_dir, created_on+f"-{log_suffix}")
     create_dir(log_dir)
 
     encoder_arch_name = params["encoder_arch_name"]
@@ -136,18 +138,21 @@ def main():
     lower, upper = params["lower"], params["upper"]
     fpr = 1.
     target = params["target"]
+    input_thresh = params["input_thresh"]
 
     while abs(fpr - target) > 1e-4: # FPR = 0.1 +- 0.01% 
-        thresh = (lower+upper)/2.
+        thresh = (lower+upper)/2. if params['thresh_search'] else input_thresh
         print(f"Current FPR: {fpr}%")
         print(f"Searching from [{lower}, {upper}]")
         print(f"Calculating FPR for thresh {thresh}...")
-        blackbox = Detector(k, thresh, encoder, MEAN, STD, log_suffix=log_suffix, log_dir=log_dir)
+        blackbox = Detector(k, thresh, encoder, MEAN, STD, num_clusters=num_classes, log_suffix=log_suffix, log_dir=log_dir)
         blackbox.init(blackbox_dir, device, time=created_on)
         total_input = 0
     
         for testset_name in candidate_sets:
             valid_datasets = datasets.__dict__.keys()
+            #if testset_name == "CIFAR10":
+            #    continue
             if testset_name not in valid_datasets:
                 raise ValueError('Dataset not found. Valid arguments = {}'.format(valid_datasets))
             modelfamily = datasets.dataset_to_modelfamily[testset_name]
@@ -193,6 +198,8 @@ def main():
             upper = thresh
         else:
             lower = thresh
+        if not params["thresh_search"]:
+            break
         print()
 
     params["thresh"] = thresh

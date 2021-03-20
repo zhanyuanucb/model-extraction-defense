@@ -40,6 +40,7 @@ class Blackbox(object):
         self.model.eval()
         self.output_type = output_type # ["one_hot", "logits", "prob"]
         self.T = T
+        print(f"############## T={self.T} ################")
         self.call_count = 0
         self.device = device
 

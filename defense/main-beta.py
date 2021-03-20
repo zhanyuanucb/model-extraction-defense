@@ -181,7 +181,8 @@ def main():
         encoder.eval()
         print(f"==> Loaded encoder: \n arch_name: {encoder_arch_name} \n margin: {encoder_margin} \n thresh: {thresh}")
 
-        blackbox = Detector(k, thresh, encoder, MEAN, STD, log_suffix=log_suffix, log_dir=log_dir)
+        #blackbox = Detector(k, thresh, encoder, MEAN, STD, log_suffix=log_suffix, log_dir=log_dir)
+        blackbox = Detector(k, thresh, encoder, MEAN, STD, num_clusters=num_classes, log_suffix=log_suffix, log_dir=log_dir)
         blackbox.init(blackbox_dir, device, time=created_on, output_type=output_type, T=T)
     else:
         blackbox = Blackbox.from_modeldir(blackbox_dir, device, output_type=output_type, T=T)
@@ -194,9 +195,12 @@ def main():
     detector_adv = None
     if params["adaptive_adv"]:
         print("=> Setting up adaptive encoder...")
-        adv_encoder = zoo.get_net("vgg16_bn", modelfamily, num_classes=num_classes)
+        adv_encoder = zoo.get_net("simnet", modelfamily, num_classes=num_classes)
         adv_encoder.fc = IdLayer().to(device)
-        adv_encoder_ckp = "/mydata/model-extraction/model-extraction-defense/defense/similarity_encoding/vgg16_bn/CINIC10-margin-3.2/checkpoint.sim-3.2.pth.tar"
+        #adv_encoder_ckp = "/mydata/model-extraction/model-extraction-defense/defense/similarity_encoding/vgg16_bn/CINIC10-margin-3.2/checkpoint.sim-3.2.pth.tar"
+
+        # Trained on cifar10 5000 seed images
+        adv_encoder_ckp = "/mydata/model-extraction/model-extraction-defense/defense/similarity_encoding/simnet_adv_seed5000/CIFAR10-margin-3.2/checkpoint.sim-3.2.pth.tar"
 
         print(f"=> Loading adv similarity encoder checkpoint '{adv_encoder_ckp}'")
         checkpoint = torch.load(adv_encoder_ckp)
@@ -205,7 +209,11 @@ def main():
         print("===> loaded checkpoint (epoch {})".format(checkpoint['epoch']))
         #encoder.fc = IdLayer(activation=activation)
         adv_encoder.eval()
-        detector_adv = AdvDetector(k, 0.8210390624999999, adv_encoder, MEAN, STD, log_suffix="adv_encoder", log_dir=log_dir)
+        #detector_adv = AdvDetector(k, 0.8210390624999999, adv_encoder, MEAN, STD, log_suffix="adv_encoder", log_dir=log_dir)
+        #detector_adv = AdvDetector(k, 0.768322265625, adv_encoder, MEAN, STD, log_suffix="adv_encoder", log_dir=log_dir)
+
+        # 10 cluster, 50-nearest neighbors
+        detector_adv = AdvDetector(k, 1.641078125, adv_encoder, MEAN, STD, num_clusters=num_classes, log_suffix="adv_encoder", log_dir=log_dir)
         detector_adv.init(device)
 
     # ----------- Initialize Adversary
@@ -274,8 +282,8 @@ def main():
     with open(params_out_path, 'w') as jf:
         json.dump(params, jf, indent=True)
 
-    #query_dist_out_path = osp.join(ckp_out_root, 'query_dist.pt')
-    #torch.save(blackbox.query_dist, query_dist_out_path)
+    query_dist_out_path = osp.join(ckp_out_root, 'query_dist.pt')
+    torch.save(blackbox.query_dist, query_dist_out_path)
 
 if __name__ == '__main__':
     main()
