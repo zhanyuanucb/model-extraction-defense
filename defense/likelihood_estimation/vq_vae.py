@@ -245,6 +245,12 @@ class VQVAE(nn.Module):
 
         return loss, x_recon, perplexity
 
+    #vq_loss, data_recon, perplexity = model(data)
+    #recon_error = F.mse_loss(data_recon, data) / data_variance
+    #loss = recon_error + vq_loss
+    #loss.backward()
+
+    #optimizer.step()
     def set_data_variance(self, data_variance):
         self.data_variance = data_variance
 

@@ -10,6 +10,7 @@ from datetime import datetime
 import torch
 import torchvision.models as models
 
+from defense.likelihood_estimation.vq_vae import VQVAE
 import attack.config as cfg
 import attack.utils.model as model_utils
 from attack.adversary.detector_adv import AdvDetector
@@ -65,12 +66,13 @@ def main():
     parser.add_argument("--T", metavar="TYPE", type=float, default=1.)
     parser.add_argument("--lpips", action="store_true")
     parser.add_argument("--encoder_arch_name", metavar="TYPE", type=str, default="simnet")
-    parser.add_argument("--encoder_ckp", metavar="PATH", type=str,
-                        default="/mydata/model-extraction/model-extraction-defense/defense/similarity_encoding/")
+    #parser.add_argument("--encoder_ckp", metavar="PATH", type=str,
+    #                    default="/mydata/model-extraction/model-extraction-defense/defense/similarity_encoding/")
     parser.add_argument('--activation', metavar='TYPE', type=str, help='Activation name', default=None)
     parser.add_argument("--encoder_suffix", metavar="TYPE", type=str, default="")
-#    parser.add_argument("--encoder_ckp", metavar="PATH", type=str,
-#                        default=None)
+    parser.add_argument("--encoder_ckpt", metavar="PATH", type=str,
+                        default=None)
+    parser.add_argument("--lk_ckpt", metavar="PATH", type=str, default=None)
     parser.add_argument("--resume", metavar="PATH", type=str,
                         default=None)
     parser.add_argument("--encoder_margin", metavar="TYPE", type=float, default=3.2)
@@ -147,19 +149,20 @@ def main():
     blackbox_dir = params["blackbox_dir"]
     output_type = params["output_type"]
     T = params["T"]
-    encoder_ckp = params["encoder_ckp"]
+    encoder_ckpt = params["encoder_ckpt"]
     encoder_margin = params["encoder_margin"]
+    lk_ckpt = params["lk_ckpt"]
 
     # setup similarity encoder
     if use_lpips:
         blackbox = LpipsDetector(k, thresh, log_suffix=log_suffix, log_dir=log_dir)
         blackbox.init(blackbox_dir, device, time=created_on, output_type=output_type, T=T)
-    elif encoder_ckp != "None":
+    elif encoder_ckpt:
         encoder_arch_name = params["encoder_arch_name"]
         encoder = zoo.get_net(encoder_arch_name, modelfamily, num_classes=num_classes)
         encoder_suffix = params["encoder_suffix"]
         encoder_arch_name += encoder_suffix
-        encoder_ckp = osp.join(encoder_ckp, encoder_arch_name, f"{testset_name}-margin-{encoder_margin}")
+        encoder_ckpt = osp.join(encoder_ckpt, encoder_arch_name, f"{testset_name}-margin-{encoder_margin}")
         activation_name = params['activation']
         if activation_name == "sigmoid":
             activation = nn.Sigmoid()
@@ -170,10 +173,9 @@ def main():
 
         encoder.fc = IdLayer(activation=activation).to(device)
 
-        ckp = osp.join(encoder_ckp, f"checkpoint.sim-{encoder_margin}.pth.tar")
+        ckp = osp.join(encoder_ckpt, f"checkpoint.sim-{encoder_margin}.pth.tar")
         print(f"=> Loading similarity encoder checkpoint '{ckp}'")
         checkpoint = torch.load(ckp)
-        start_epoch = checkpoint['epoch']
         encoder.load_state_dict(checkpoint['state_dict'])
         print("===> loaded checkpoint (epoch {})".format(checkpoint['epoch']))
         #encoder.fc = IdLayer(activation=activation)
@@ -183,6 +185,21 @@ def main():
 
         #blackbox = Detector(k, thresh, encoder, MEAN, STD, log_suffix=log_suffix, log_dir=log_dir)
         blackbox = Detector(k, thresh, encoder, MEAN, STD, num_clusters=num_classes, log_suffix=log_suffix, log_dir=log_dir)
+        blackbox.init(blackbox_dir, device, time=created_on, output_type=output_type, T=T)
+    elif lk_ckpt:
+        num_hiddens = 128
+        num_residual_hiddens = 32
+        num_residual_layers = 2
+        embedding_dim = 64
+        num_embeddings = 512
+        commitment_cost = 0.25
+        decay = 0.99
+        encoder = VQVAE(num_hiddens, num_residual_layers, num_residual_hiddens,
+                      num_embeddings, embedding_dim, 
+                      commitment_cost, decay).to(device)
+        encoder.load_ckpt(lk_ckpt)
+        encoder.eval()
+        blackbox = VAEDetector(k, thresh, encoder, MEAN, STD, num_clusters=num_classes, log_suffix=log_suffix, log_dir=log_dir)
         blackbox.init(blackbox_dir, device, time=created_on, output_type=output_type, T=T)
     else:
         blackbox = Blackbox.from_modeldir(blackbox_dir, device, output_type=output_type, T=T)

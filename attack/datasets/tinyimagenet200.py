@@ -49,7 +49,7 @@ class TinyImageNet200(ImageFolder):
         print('=> done loading {} ({}) with {} examples'.format(self.__class__.__name__, 'train' if train else 'test',
                                                                 len(self.samples)))
 
-        self._load_meta()
+        #self._load_meta()
 
     def _load_meta(self):
         """Replace class names (synsets) with more descriptive labels"""

@@ -81,21 +81,31 @@
 #                      --log_suffix=$encoder_arch_name \
 #                      -l CINIC10 CIFAR10 \
 #                      --device_id=1
-                      
+
+encoder_ckpt="/mydata/model-extraction/model-extraction-defense/defense/similarity_encoding/"
+lk_ckpt="/mydata/model-extraction/model-extraction-defense/defense/likelihood_estimation/vq.ckpt"
+
 encoder_arch_name="simnet"                      
 encoder_suffix="_ep30"
-log_suffix="simnet_ep30-cluster10-cifar10"
+#for querydata in 'TinyImageNet200' 'ImageNet1k' 'CIFAR100' 'CINIC10'
+for querydata in 'Indoor67' 'CUBS200' 'Caltech256'
+do
 CUDA_VISIBLE_DEVICES=1 python benign_user.py \
+                      --batch_size=32 \
                       --encoder_arch_name=$encoder_arch_name \
                       --encoder_margin=3.2 \
                       --encoder_suffix=$encoder_suffix \
-                      --input_thresh=0.15475732421875 \
+                      --lk_ckpt=$lk_ckpt \
+                      --input_thresh=0.12986328125 \
                       --lower=1e-3 \
                       --upper=3. \
-                      --k=10 \
-                      --log_suffix=$log_suffix \
-                      -l CIFAR10 \
+                      --k=1 \
+                      --log_suffix=benign-vae-{$querydata} \
+                      -l $querydata\
                       --device_id=1                     
+done                      
+#  
+#  'ImageNet1k' 'SVHN' 'CIFAR100' 'CINIC10' 'Indoor67' 'CUBS200' 'Caltech256' 
 
 #encoder_arch_name="simnet"                      
 #encoder_suffix="_adv_seed5000"

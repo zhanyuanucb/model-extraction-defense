@@ -148,8 +148,26 @@ class Detector:
         self.blackbox.eval()
 
 
-class VAEDetector:
-    def __init__(self, k, thresh, encoder, mean, std, 
+class VAEDetector(Detector):
+    def __init__(self, k, thresh, vae, mean, std, 
                  num_clusters=50, buffer_size=1000, memory_capacity=100000,
                  log_suffix="", log_dir="./"):
-        super(VAEDetector, self).__init__()
+        super(VAEDetector, self).__init__(k, thresh, None, mean, std, 
+                                          num_clusters=num_clusters, buffer_size=buffer_size, memory_capacity=memory_capacity)
+        self.vae = vae
+        self.query_dist = []
+        """
+        self.lk_sum = 0.
+        self.lk_sqr_sum = 0.
+        self.
+        """
+
+    def _process(self, images):
+        is_adv = [0 for _ in range(images.size(0))]
+        self.call_count += images.size(0)
+        with torch.no_grad():
+            #images = images * self.STD + self.MEAN
+            lk = self.vae.likelihood(images).cpu().numpy().mean()
+        self.query_dist.append(lk)
+
+        return is_adv
