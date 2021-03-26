@@ -2,11 +2,13 @@
 import os
 import argparse
 from datetime import datetime
+import json
 import sys
 import os.path as osp
 sys.path.append('./pytorch-generative')
 sys.path.append('../../')
 
+import matplotlib.pyplot as plt
 import numpy as np
 from sklearn.model_selection import train_test_split
 from six.moves import xrange
@@ -111,6 +113,10 @@ def main():
                                  batch_size=batch_size, 
                                  shuffle=True,
                                  pin_memory=True)
+    eval_loader = DataLoader(valset, 
+                             batch_size=batch_size, 
+                             shuffle=True)
+
 
     ##########################################
     # Set up for PixcelCNN prior training
@@ -121,41 +127,79 @@ def main():
     learning_rate = params["lr"]
     model = MODEL_DICT['gated_pixel_cnn']
     pixel_cnn = model.GatedPixelCNN()
+    pixel_cnn = pixel_cnn.to(device)
     optimizer = optim.Adam(pixel_cnn.parameters(), lr=learning_rate, amsgrad=False)              
 
 
     ###########################################
     # Start training
     ###########################################
-    pixel_cnn.train()
     num_training_updates = params['num_training_updates']
+    num_iter_per_epoch = num_training_updates//len(trainset)
 
     loss_fn = nn.CrossEntropyLoss()
+    val_loss_hist = []
+    best_val_loss = float("inf")
     for i in xrange(num_training_updates):
-        (data, _) = next(iter(training_loader))
+        pixel_cnn.train()
+        (input, _) = next(iter(training_loader))
 
-        data = data.to(device)
+        input = input.to(device)
         optimizer.zero_grad()
 
         #vq_loss, data_recon, perplexity = vqvae(data)
-        vq_output = vqvae._pre_vq_conv(vqvae._encoder(data))
+        vq_output = vqvae._pre_vq_conv(vqvae._encoder(input))
         _, z, _, _ = vqvae._vq_vae(vq_output)
 
         logits = pixel_cnn(z)
-        px = Categorical(logits=logits)
-        sampled_pixelcnn = px.sample()
-
-
-
-        loss = loss_fn()
+        logits = logits.permute(0, 2, 3, 1).view(-1, num_embeddings)
+        #px = Categorical(logits=logits)
+        #sampled_pixelcnn = px.sample()
+        #log_prob = px.log_prob(sampled_pixelcnn)
+        input = input.permute(0, 2, 3, 1) # BCHW -> BHWC
+        label = input.view(-1,).to(torch.long)
+        loss = loss_fn(logits, label)
         loss.backward()
-
         optimizer.step()
 
-        if (i+1) % 100 == 0:
-            print('%d iterations' % (i+1))
-            torch.save(pixel_cnn.state_dict(), osp.join(log_dir, "./pixelcnn.ckpt"))
-            print()
+        if (i+1) % num_iter_per_epoch == 0:
+            pixel_cnn.eval()
+            val_loss = 0.
+            total = 0
+            with torch.no_grad():
+                for i, (input, _) in enumerate(eval_loader):
+                    input = input.to(device)
+                    total += input.size(0)
+
+                    vq_output = vqvae._pre_vq_conv(vqvae._encoder(input))
+                    _, z, _, _ = vqvae._vq_vae(vq_output)
+
+                    logits = pixel_cnn(z)
+                    logits = logits.permute(0, 2, 3, 1).view(-1, num_embeddings)
+                    #px = Categorical(logits=logits)
+                    #sampled_pixelcnn = px.sample()
+                    #log_prob = px.log_prob(sampled_pixelcnn)
+                    input = input.permute(0, 2, 3, 1) # BCHW -> BHWC
+                    label = input.view(-1,).to(torch.long)
+                    loss = loss_fn(logits, label)
+                    val_loss += loss.item()
+            val_loss /= total
+            val_loss_hist.append(val_loss)
+            if val_loss < best_val_loss:
+                print(f"Val Loss at epoch {(i+1) // num_iter_per_epoch}: {val_loss}")
+                torch.save(pixel_cnn.state_dict(), osp.join(log_dir, "./pixelcnn.ckpt"))
+                print()
+
+    plt.plot()
+    plt.plot(val_loss_hist)
+    plt.xlabel("epoch")
+    plt.ylabel("validation loss")
+    plt.savefig(osp.join(log_dir, "val_loss_hist.png"))
+    plt.show()
+
+    params_out_path = osp.join(log_dir, 'params.json')
+    with open(params_out_path, 'w') as jf:
+        json.dump(params, jf, indent=True)
 
 if __name__ == "__main__":
     main()
