@@ -131,7 +131,11 @@ def main():
     ##########################################
     params['created_on'] = str(datetime.now()).replace(' ', '_')[:19]
     created_on = params['created_on']
-    log_dir = osp.join(params["log_dir"], created_on+'-'+params['log_suffix'])
+    if params['log_suffix']:
+        log_dir = osp.join(params["log_dir"], created_on+'-'+params['log_suffix'])
+    else:
+        log_dir = osp.join(params["log_dir"], created_on)
+    create_dir(log_dir)
     learning_rate = params["lr"]
     model = MODEL_DICT['gated_pixel_cnn']
 
@@ -155,6 +159,7 @@ def main():
     ###########################################
     # Start training
     ###########################################
+    print("=> Start training")
     num_epochs = params['num_epochs']
     #num_iter_per_epoch = num_training_updates//len(trainset)
     grad_clip = 1.
