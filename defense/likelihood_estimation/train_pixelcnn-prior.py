@@ -42,9 +42,10 @@ MODEL_DICT = {
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--num_training_updates", type=int, help="number of training epochs", default=30000)
+    parser.add_argument("--num_epochs", type=int, help="number of training epochs", default=60)
     parser.add_argument("--lr", metavar="TYPE", type=float, help="binary search lowerbound", default=1e-3)
-    parser.add_argument("--batch_size", metavar="TYPE", type=int, default=100)
+    parser.add_argument("--batch_size", metavar="TYPE", type=int, default=128)
+    parser.add_argument('--dataset_name', metavar='TYPE', type=str, default="CIFAR10")
     parser.add_argument("--num_hiddens", metavar="TYPE", type=int, default=128)
     parser.add_argument("--num_residual_hiddens", metavar="TYPE", type=int, default=32)
     parser.add_argument("--num_residual_layers", metavar="TYPE", type=int, default=2)
@@ -61,8 +62,11 @@ def main():
     args = parser.parse_args()
     params = vars(args)
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
+    if params['device_id'] >= 0:
+        os.environ["CUDA_VISIBLE_DEVICES"] = str(params['device_id'])
+        device = torch.device('cuda')
+    else:
+        device = torch.device('cpu')
 
     ###################################
     # Prepare VQ-VAE
@@ -73,7 +77,7 @@ def main():
     embedding_dim = params["embedding_dim"]
     num_embeddings = params["num_embeddings"]
     commitment_cost = params["commitment_cost"]
-    vqvae_ckpt = params["vavqe_ckpt"]
+    vqvae_ckpt = params["vqvae_ckpt"]
 
     decay = params["decay"] 
     vqvae = VQVAE(num_hiddens, num_residual_layers, num_residual_hiddens,
@@ -111,13 +115,13 @@ def main():
         seed_idx = np.random.choice(range(len(trainset)), size=params['seedsize'], replace=False)
         train_idx, val_idx = train_test_split(seed_idx, test_size=0.1, random_state=42)
         trainset = Subset(trainset_full, train_idx)
-        valset = Subset(trainset_full, val_idx)
+        testset = Subset(trainset_full, val_idx)
 
     training_loader = DataLoader(trainset, 
                                  batch_size=batch_size, 
                                  shuffle=True,
                                  pin_memory=True)
-    eval_loader = DataLoader(valset, 
+    eval_loader = DataLoader(testset, 
                              batch_size=batch_size, 
                              shuffle=True)
 
@@ -131,7 +135,7 @@ def main():
     learning_rate = params["lr"]
     model = MODEL_DICT['gated_pixel_cnn']
 
-    #code_size = 32
+    code_size = 8
     in_channels= 1
     out_channels = num_embeddings
     n_gated = 11 #num_layers_pixelcnn = 12
@@ -151,63 +155,66 @@ def main():
     ###########################################
     # Start training
     ###########################################
-    num_training_updates = params['num_training_updates']
-    num_iter_per_epoch = num_training_updates//len(trainset)
+    num_epochs = params['num_epochs']
+    #num_iter_per_epoch = num_training_updates//len(trainset)
     grad_clip = 1.
     loss_fn = nn.CrossEntropyLoss()
     val_loss_hist = []
     best_val_loss = float("inf")
-    training_loader_iter = iter(training_loader)
-    for i in xrange(num_training_updates):
+    #training_loader_iter = iter(training_loader)
+    for epoch in range(1, num_epochs):
         pixel_cnn.train()
-        (input, _) = next(training_loader_iter)
+        for input, _ in training_loader:
+            input = input.to(device)
+            optimizer.zero_grad()
 
-        input = input.to(device)
-        optimizer.zero_grad()
+            # Get z_x
+            vq_output = vqvae._pre_vq_conv(vqvae._encoder(input))
+            _, _, _, z = vqvae._vq_vae(vq_output)
+            z = z.view((-1, in_channels, code_size, code_size)) # (B*CS*CS, 1) -> (B, 1, CS, CS)
+            labels = z.clone().view(-1, )
+            z = z.to(torch.float)
 
-        #vq_loss, data_recon, perplexity = vqvae(data)
-        vq_output = vqvae._pre_vq_conv(vqvae._encoder(input))
-        _, z, _, _ = vqvae._vq_vae(vq_output)
+            logits = pixel_cnn(z)
+            logits = logits.permute(0, 2, 3, 1).reshape(-1, num_embeddings)
+            #px = Categorical(logits=logits)
+            #sampled_pixelcnn = px.sample()
+            #log_prob = px.log_prob(sampled_pixelcnn)
+            input = input.permute(0, 2, 3, 1) # BCHW -> BHWC
+            loss = loss_fn(logits, labels)
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(pixel_cnn.parameters(), grad_clip, norm_type='inf')
+            optimizer.step()
 
-        logits = pixel_cnn(z)
-        logits = logits.permute(0, 2, 3, 1).view(-1, num_embeddings)
-        #px = Categorical(logits=logits)
-        #sampled_pixelcnn = px.sample()
-        #log_prob = px.log_prob(sampled_pixelcnn)
-        input = input.permute(0, 2, 3, 1) # BCHW -> BHWC
-        label = input.view(-1,).to(torch.long)
-        loss = loss_fn(logits, label)
-        loss.backward()
-        torch.nn.utils.clip_grad_norm(pixel_cnn.parameters(), grad_clip)
-        optimizer.step()
+        pixel_cnn.eval()
+        val_loss = 0.
+        total = 0
+        with torch.no_grad():
+            for input, _ in eval_loader:
+                input = input.to(device)
+                total += input.size(0)
 
-        if (i+1) % num_iter_per_epoch == 0:
-            pixel_cnn.eval()
-            val_loss = 0.
-            total = 0
-            with torch.no_grad():
-                for i, (input, _) in enumerate(eval_loader):
-                    input = input.to(device)
-                    total += input.size(0)
+                # Get z_x
+                vq_output = vqvae._pre_vq_conv(vqvae._encoder(input))
+                _, _, _, z = vqvae._vq_vae(vq_output)
+                z = z.view((-1, in_channels, code_size, code_size)) # (B*CS*CS, 1) -> (B, 1, CS, CS)
+                labels = z.clone().view(-1, )
+                z = z.to(torch.float)
 
-                    vq_output = vqvae._pre_vq_conv(vqvae._encoder(input))
-                    _, z, _, _ = vqvae._vq_vae(vq_output)
-
-                    logits = pixel_cnn(z)
-                    logits = logits.permute(0, 2, 3, 1).view(-1, num_embeddings)
-                    #px = Categorical(logits=logits)
-                    #sampled_pixelcnn = px.sample()
-                    #log_prob = px.log_prob(sampled_pixelcnn)
-                    input = input.permute(0, 2, 3, 1) # BCHW -> BHWC
-                    label = input.view(-1,).to(torch.long)
-                    loss = loss_fn(logits, label)
-                    val_loss += loss.item()
-            val_loss /= total
-            val_loss_hist.append(val_loss)
-            if val_loss < best_val_loss:
-                print(f"Val Loss at epoch {(i+1) // num_iter_per_epoch}: {val_loss}")
-                torch.save(pixel_cnn.state_dict(), osp.join(log_dir, "./pixelcnn.ckpt"))
-                print()
+                logits = pixel_cnn(z)
+                logits = logits.permute(0, 2, 3, 1).view(-1, num_embeddings)
+                #px = Categorical(logits=logits)
+                #sampled_pixelcnn = px.sample()
+                #log_prob = px.log_prob(sampled_pixelcnn)
+                input = input.permute(0, 2, 3, 1) # BCHW -> BHWC
+                loss = loss_fn(logits, labels)
+                val_loss += loss.item()
+        val_loss /= total
+        val_loss_hist.append(val_loss)
+        if val_loss < best_val_loss:
+            print(f"Val Loss at epoch {epoch}: {val_loss}")
+            torch.save(pixel_cnn.state_dict(), osp.join(log_dir, "./pixelcnn.ckpt"))
+            print()
 
     plt.plot()
     plt.plot(val_loss_hist)
