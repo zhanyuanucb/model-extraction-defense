@@ -202,7 +202,7 @@ def main():
                 z = z.to(torch.float)
 
                 logits = pixel_cnn(z)
-                logits = logits.permute(0, 2, 3, 1).view(-1, num_embeddings)
+                logits = logits.permute(0, 2, 3, 1).reshape(-1, num_embeddings)
                 #px = Categorical(logits=logits)
                 #sampled_pixelcnn = px.sample()
                 #log_prob = px.log_prob(sampled_pixelcnn)
