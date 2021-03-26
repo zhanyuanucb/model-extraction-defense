@@ -84,14 +84,15 @@
 
 encoder_ckpt="/mydata/model-extraction/model-extraction-defense/defense/similarity_encoding/"
 lk_ckpt="/mydata/model-extraction/model-extraction-defense/defense/likelihood_estimation/vq.ckpt"
-
+#lk_ckpt="/mydata/model-extraction/model-extraction-defense/defense/likelihood_estimation/vq-vae_ckpt/2021-03-22_00:49:29-cifar10-no-div-var/vq.ckpt"
+#lk_ckpt="/mydata/model-extraction/model-extraction-defense/defense/likelihood_estimation/vq-vae_ckpt/2021-03-22_02:47:25-cinic10-no_var/vq.ckpt"
 encoder_arch_name="simnet"                      
 encoder_suffix="_ep30"
-#for querydata in 'TinyImageNet200' 'ImageNet1k' 'CIFAR100' 'CINIC10'
-for querydata in 'Indoor67' 'CUBS200' 'Caltech256'
+#for querydata in 'ImageNet1k' 'CIFAR100' 'CINIC10'
+for querydata in 'Indoor67' 'CUBS200' 'Caltech256' 'CIFAR100' 'TinyImageNet200' 'CINIC10' 'ImageNet1k' 
 do
 CUDA_VISIBLE_DEVICES=1 python benign_user.py \
-                      --batch_size=32 \
+                      --batch_size=64 \
                       --encoder_arch_name=$encoder_arch_name \
                       --encoder_margin=3.2 \
                       --encoder_suffix=$encoder_suffix \
@@ -100,7 +101,7 @@ CUDA_VISIBLE_DEVICES=1 python benign_user.py \
                       --lower=1e-3 \
                       --upper=3. \
                       --k=1 \
-                      --log_suffix=benign-vae-{$querydata} \
+                      --log_suffix=vae-stream-var_{$querydata} \
                       -l $querydata\
                       --device_id=1                     
 done                      

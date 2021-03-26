@@ -1,0 +1,3 @@
+[submodule "defense/likelihood_estimation/pytorch-generative"]
+	path = defense/likelihood_estimation/pytorch-generative
+	url = git@github.com:EugenHotaj/pytorch-generative.git

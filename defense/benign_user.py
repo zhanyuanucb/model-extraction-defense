@@ -71,7 +71,6 @@ def main():
     log_suffix = params["log_suffix"]
     log_dir = params["log_dir"]
     use_lpips = params["lpips"]
-    created_on = str(datetime.now()).replace(' ', '_')[:19]
     log_dir = osp.join(log_dir, created_on+f"-{log_suffix}")
     create_dir(log_dir)
 
@@ -94,9 +93,10 @@ def main():
     lk_ckpt = params["lk_ckpt"]
     encoder_suffix = params["encoder_suffix"]
     candidate_sets = params["testset_names"]
+    input_thresh = params["input_thresh"]
     # setup similarity encoder
     if use_lpips:
-        blackbox = LpipsDetector(k, thresh, log_suffix=log_suffix, log_dir=log_dir)
+        blackbox = LpipsDetector(k, input_thresh, log_suffix=log_suffix, log_dir=log_dir)
         blackbox.init(blackbox_dir, device, time=created_on)
     elif encoder_ckpt:
         encoder_arch_name = params["encoder_arch_name"]
@@ -156,7 +156,6 @@ def main():
     lower, upper = params["lower"], params["upper"]
     fpr = 1.
     target = params["target"]
-    input_thresh = params["input_thresh"]
 
     while abs(fpr - target) > 1e-4: # FPR = 0.1 +- 0.01% 
         thresh = (lower+upper)/2. if params['thresh_search'] else input_thresh

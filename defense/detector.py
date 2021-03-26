@@ -156,18 +156,27 @@ class VAEDetector(Detector):
                                           num_clusters=num_clusters, buffer_size=buffer_size, memory_capacity=memory_capacity)
         self.vae = vae
         self.query_dist = []
-        """
-        self.lk_sum = 0.
-        self.lk_sqr_sum = 0.
-        self.
-        """
+        self.num_samples = 0
+        self.pixel_sum = 0.
+        self.pixel_sqr_sum = 0.
 
     def _process(self, images):
         is_adv = [0 for _ in range(images.size(0))]
-        self.call_count += images.size(0)
+        B, C, H, W = images.shape
+        self.num_samples += B*C*H*W
         with torch.no_grad():
+            # Calculate data variance from stream data
+            self.pixel_sum += torch.sum(images).item()
+            self.pixel_sqr_sum += torch.sum(images**2).item()
+            stream_var = self.get_stream_variance()
+            self.vae.set_data_variance(stream_var)
+
+            self.call_count += images.size(0)
             #images = images * self.STD + self.MEAN
-            lk = self.vae.likelihood(images).cpu().numpy().mean()
+            lk = self.vae.neglikelihood(images).cpu().numpy().mean()
         self.query_dist.append(lk)
 
         return is_adv
+
+    def get_stream_variance(self):
+        return (self.pixel_sqr_sum - self.pixel_sum**2/self.num_samples)/self.num_samples

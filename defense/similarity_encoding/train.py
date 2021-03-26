@@ -13,6 +13,7 @@ import sys
 sys.path.append('/mydata/model-extraction/model-extraction-defense/')
 sys.path.append('/mydata/model-extraction/model-extraction-defense/attack/adversary/query_blinding')
 import numpy as np
+from sklearn.model_selection import train_test_split
 import random
 
 from tqdm import tqdm
@@ -63,6 +64,8 @@ def main():
     parser.add_argument('--train_epochs', metavar='TYPE', type=int, help='Training epochs', default=200)
     parser.add_argument('--sim_epochs', metavar='TYPE', type=int, help='Training epochs', default=50)
     parser.add_argument('--sim_norm', action='store_true')
+    parser.add_argument('--train_on_seed', action='store_true')
+    parser.add_argument('--seedsize', metavar='TYPE', type=int, help='size of seed images', default=5000)
     parser.add_argument('--activation', metavar='TYPE', type=str, help='Activation name', default=None)
     parser.add_argument('--adv_train', action='store_true')
     parser.add_argument('--callback', metavar='TYPE', type=float, help='Stop training once val acc meets requirement', default=None)
@@ -112,15 +115,15 @@ def main():
     except TypeError as e:
         trainset = datasets.__dict__[dataset_name](split="train", transform=train_transform) # Augment data while training
         valset = datasets.__dict__[dataset_name](split="valid", transform=test_transform)
-    from sklearn.model_selection import train_test_split
     ##########################################
     # Using seed images
     ##########################################
-    trainset_full = trainset
-    seed_idx = np.random.choice(range(len(trainset)), size=5000, replace=False)
-    train_idx, val_idx = train_test_split(seed_idx, test_size=0.1, random_state=42)
-    trainset = Subset(trainset_full, train_idx)
-    valset = Subset(trainset_full, val_idx)
+    if params['train_on_seed']:
+        trainset_full = trainset
+        seed_idx = np.random.choice(range(len(trainset)), size=params['seedsize'], replace=False)
+        train_idx, val_idx = train_test_split(seed_idx, test_size=0.1, random_state=42)
+        trainset = Subset(trainset_full, train_idx)
+        valset = Subset(trainset_full, val_idx)
 
     model_name = params['model_name']
     num_classes = params['num_classes']
@@ -175,11 +178,12 @@ def main():
     ################################
     # Adversary only use seed images
     ################################
-    sim_trainset.data, sim_trainset.targets = np.transpose(trainset.dataset.data[trainset.indices], (0, 3, 1, 2)), [trainset.dataset.targets[idx] for idx in trainset.indices]
-    sim_trainset.n_samples = sim_trainset.data.shape[0]
+    if params["train_on_seed"]:
+        sim_trainset.data, sim_trainset.targets = np.transpose(trainset.dataset.data[trainset.indices], (0, 3, 1, 2)), [trainset.dataset.targets[idx] for idx in trainset.indices]
+        sim_trainset.n_samples = sim_trainset.data.shape[0]
 
-    sim_valset.data, sim_valset.targets = np.transpose(valset.dataset.data[valset.indices], (0, 3, 1, 2)), [valset.dataset.targets[idx] for idx in valset.indices]
-    sim_valset.n_samples = sim_valset.data.shape[0]
+        sim_valset.data, sim_valset.targets = np.transpose(valset.dataset.data[valset.indices], (0, 3, 1, 2)), [valset.dataset.targets[idx] for idx in valset.indices]
+        sim_valset.n_samples = sim_valset.data.shape[0]
 
 
     #blinders_dir = params["blinders_dir"]

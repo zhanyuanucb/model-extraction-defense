@@ -52,11 +52,11 @@ def main():
     parser.add_argument("--eps", metavar="TYPE", type=float, default=0.1)
     parser.add_argument('--num_steps', metavar='N', type=int, help='# steps', default=8)
     parser.add_argument('--rho', metavar='N', type=int, help='# Data Augmentation Steps', default=6)
-    parser.add_argument('--sigma', metavar='N', type=int, help='Reservoir sampling beyond these many epochs', default=3)
+    parser.add_argument('--sigma', metavar='N', type=int, help='Reservoir sampling beyond these many epochs', default=-1)
     parser.add_argument('--kappa', metavar='N', type=int, help='Size of reservoir', default=None)
     parser.add_argument('--take_lastk', metavar='N', type=int, help='Size of reservoir', default=-1)
     parser.add_argument('--tau', metavar='N', type=int,
-                        help='Iteration period after which step size is multiplied by -1', default=5)
+                        help='Iteration period after which step size is multiplied by -1', default=None)
     parser.add_argument('--train_epochs', metavar='N', type=int, help='# Epochs to train model', default=20)
 
     # -------------------- Blackbox/Detector
@@ -66,8 +66,6 @@ def main():
     parser.add_argument("--T", metavar="TYPE", type=float, default=1.)
     parser.add_argument("--lpips", action="store_true")
     parser.add_argument("--encoder_arch_name", metavar="TYPE", type=str, default="simnet")
-    #parser.add_argument("--encoder_ckp", metavar="PATH", type=str,
-    #                    default="/mydata/model-extraction/model-extraction-defense/defense/similarity_encoding/")
     parser.add_argument('--activation', metavar='TYPE', type=str, help='Activation name', default=None)
     parser.add_argument("--encoder_suffix", metavar="TYPE", type=str, default="")
     parser.add_argument("--encoder_ckpt", metavar="PATH", type=str,
@@ -77,6 +75,7 @@ def main():
                         default=None)
     parser.add_argument("--encoder_margin", metavar="TYPE", type=float, default=3.2)
     parser.add_argument("--k", metavar="TYPE", type=int, default=1)
+    parser.add_argument("--num_clusters", metavar="TYPE", type=int, default=50)
     parser.add_argument("--thresh", metavar="TYPE", type=float, help="detector threshold", default=0.16197727304697038)
     parser.add_argument('--adaptive_adv', action='store_true', help='Perform data augmentation', default=False)
     parser.add_argument('--binary_search', action='store_true', help='Perform data augmentation', default=False)
@@ -140,6 +139,7 @@ def main():
 
     # ----------- Initialize Detector
     k = params["k"]
+    num_clusters = params["num_clusters"]
     thresh = params["thresh"]
     log_dir = ckp_out_root
     MEAN, STD = cfg.NORMAL_PARAMS[modelfamily]
@@ -184,7 +184,8 @@ def main():
         print(f"==> Loaded encoder: \n arch_name: {encoder_arch_name} \n margin: {encoder_margin} \n thresh: {thresh}")
 
         #blackbox = Detector(k, thresh, encoder, MEAN, STD, log_suffix=log_suffix, log_dir=log_dir)
-        blackbox = Detector(k, thresh, encoder, MEAN, STD, num_clusters=num_classes, log_suffix=log_suffix, log_dir=log_dir)
+        #blackbox = Detector(k, thresh, encoder, MEAN, STD, num_clusters=num_classes, log_suffix=log_suffix, log_dir=log_dir)
+        blackbox = Detector(k, thresh, encoder, MEAN, STD, num_clusters=num_clusters, log_suffix=log_suffix, log_dir=log_dir)
         blackbox.init(blackbox_dir, device, time=created_on, output_type=output_type, T=T)
     elif lk_ckpt:
         num_hiddens = 128
@@ -199,7 +200,7 @@ def main():
                       commitment_cost, decay).to(device)
         encoder.load_ckpt(lk_ckpt)
         encoder.eval()
-        blackbox = VAEDetector(k, thresh, encoder, MEAN, STD, num_clusters=num_classes, log_suffix=log_suffix, log_dir=log_dir)
+        blackbox = VAEDetector(k, thresh, encoder, MEAN, STD, num_clusters=num_clusters, log_suffix=log_suffix, log_dir=log_dir)
         blackbox.init(blackbox_dir, device, time=created_on, output_type=output_type, T=T)
     else:
         blackbox = Blackbox.from_modeldir(blackbox_dir, device, output_type=output_type, T=T)

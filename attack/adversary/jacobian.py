@@ -594,7 +594,8 @@ class JacobianAdversary:
         if epsilon == 0:
             return torch.zeros_like(inputs)
 
-        alpha = 2*epsilon/num_iter
+        #alpha = 2*epsilon/num_iter
+        alpha = 0.01
         with torch.enable_grad():
             inputs = inputs.to(device)
             delta = torch.zeros_like(inputs, requires_grad=True).to(device)
