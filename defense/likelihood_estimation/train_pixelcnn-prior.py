@@ -52,6 +52,7 @@ def main():
     parser.add_argument("--num_embeddings", metavar="TYPE", type=int, default=512)
     parser.add_argument("--commitment_cost", metavar="TYPE", type=float, help="binary search lowerbound", default=0.25)
     parser.add_argument("--decay", metavar="TYPE", type=float, help="binary search lowerbound", default=0.99)
+    parser.add_argument("--vqvae_ckpt", metavar="PATH", type=str, default=None)
     parser.add_argument("--log_dir", metavar="PATH", type=str, default="./vq-vae_ckpt")
     parser.add_argument("--log_suffix", metavar="TYPE", type=str, default="")
     parser.add_argument('--train_on_seed', action='store_true')
@@ -72,10 +73,13 @@ def main():
     embedding_dim = params["embedding_dim"]
     num_embeddings = params["num_embeddings"]
     commitment_cost = params["commitment_cost"]
+    vqvae_ckpt = params["vavqe_ckpt"]
+
     decay = params["decay"] 
     vqvae = VQVAE(num_hiddens, num_residual_layers, num_residual_hiddens,
                   num_embeddings, embedding_dim, 
                   commitment_cost, decay).to(device)
+    vqvae.load_ckpt(vqvae_ckpt)
     vqvae.eval()
 
     ###################################
@@ -126,7 +130,20 @@ def main():
     log_dir = osp.join(params["log_dir"], created_on+'-'+params['log_suffix'])
     learning_rate = params["lr"]
     model = MODEL_DICT['gated_pixel_cnn']
-    pixel_cnn = model.GatedPixelCNN()
+
+    #code_size = 32
+    in_channels= 1
+    out_channels = num_embeddings
+    n_gated = 11 #num_layers_pixelcnn = 12
+    gated_channels = 32 #fmaps_pixelcnn = 32
+    head_channels = 32
+
+    pixel_cnn = model.GatedPixelCNN(in_channels=in_channels, 
+                                    out_channels=out_channels,
+                                    n_gated=n_gated,
+                                    gated_channels=gated_channels, 
+                                    head_channels=head_channels)
+
     pixel_cnn = pixel_cnn.to(device)
     optimizer = optim.Adam(pixel_cnn.parameters(), lr=learning_rate, amsgrad=False)              
 
@@ -136,13 +153,14 @@ def main():
     ###########################################
     num_training_updates = params['num_training_updates']
     num_iter_per_epoch = num_training_updates//len(trainset)
-
+    grad_clip = 1.
     loss_fn = nn.CrossEntropyLoss()
     val_loss_hist = []
     best_val_loss = float("inf")
+    training_loader_iter = iter(training_loader)
     for i in xrange(num_training_updates):
         pixel_cnn.train()
-        (input, _) = next(iter(training_loader))
+        (input, _) = next(training_loader_iter)
 
         input = input.to(device)
         optimizer.zero_grad()
@@ -160,6 +178,7 @@ def main():
         label = input.view(-1,).to(torch.long)
         loss = loss_fn(logits, label)
         loss.backward()
+        torch.nn.utils.clip_grad_norm(pixel_cnn.parameters(), grad_clip)
         optimizer.step()
 
         if (i+1) % num_iter_per_epoch == 0:
