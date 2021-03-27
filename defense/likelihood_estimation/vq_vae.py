@@ -250,15 +250,15 @@ class VQVAE(nn.Module):
     def set_data_variance(self, data_variance):
         self.data_variance = data_variance
 
-    def neglikelihood(self, x):
+    def get_neglikelihood(self, x):
         _, x_recon, _ = self.forward(x)
         return F.mse_loss(x_recon, x) / self.data_variance
 
     def load_ckpt(self, ckpt_dir):
         try:
             state_dict = torch.load(ckpt_dir)
+            self.load_state_dict(state_dict)
         except:
             print(f"Failed to load checkpoint from {ckpt_dir}")
             exit(1)
-        self.load_state_dict(state_dict)
         print(f"Successfully loaded VQ-VAE ckpt from {ckpt_dir}")

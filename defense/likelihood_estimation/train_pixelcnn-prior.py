@@ -54,7 +54,7 @@ def main():
     parser.add_argument("--commitment_cost", metavar="TYPE", type=float, help="binary search lowerbound", default=0.25)
     parser.add_argument("--decay", metavar="TYPE", type=float, help="binary search lowerbound", default=0.99)
     parser.add_argument("--vqvae_ckpt", metavar="PATH", type=str, default=None)
-    parser.add_argument("--log_dir", metavar="PATH", type=str, default="./vq-vae_ckpt")
+    parser.add_argument("--log_dir", metavar="PATH", type=str, default="./pixelcnn_ckpt")
     parser.add_argument("--log_suffix", metavar="TYPE", type=str, default="")
     parser.add_argument('--train_on_seed', action='store_true')
     parser.add_argument('--seedsize', metavar='TYPE', type=int, help='size of seed images', default=5000)
@@ -182,10 +182,6 @@ def main():
 
             logits = pixel_cnn(z)
             logits = logits.permute(0, 2, 3, 1).reshape(-1, num_embeddings)
-            #px = Categorical(logits=logits)
-            #sampled_pixelcnn = px.sample()
-            #log_prob = px.log_prob(sampled_pixelcnn)
-            input = input.permute(0, 2, 3, 1) # BCHW -> BHWC
             loss = loss_fn(logits, labels)
             loss.backward()
             torch.nn.utils.clip_grad_norm_(pixel_cnn.parameters(), grad_clip, norm_type='inf')
@@ -211,7 +207,6 @@ def main():
                 #px = Categorical(logits=logits)
                 #sampled_pixelcnn = px.sample()
                 #log_prob = px.log_prob(sampled_pixelcnn)
-                input = input.permute(0, 2, 3, 1) # BCHW -> BHWC
                 loss = loss_fn(logits, labels)
                 val_loss += loss.item()
         val_loss /= total
