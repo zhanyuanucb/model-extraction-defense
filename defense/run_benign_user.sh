@@ -88,20 +88,19 @@ lk_ckpt="/mydata/model-extraction/model-extraction-defense/defense/likelihood_es
 #lk_ckpt="/mydata/model-extraction/model-extraction-defense/defense/likelihood_estimation/vq-vae_ckpt/2021-03-22_02:47:25-cinic10-no_var/vq.ckpt"
 encoder_arch_name="simnet"                      
 encoder_suffix="_ep30"
-#for querydata in 'ImageNet1k' 'CIFAR100' 'CINIC10'
-for querydata in 'Indoor67' 'CUBS200' 'Caltech256' 'CIFAR100' 'TinyImageNet200' 'CINIC10' 'ImageNet1k' 
+#for querydata in 'ImageNet1k' 'CIFAR100' 'CINIC10' 'CIFAR10' 'Indoor67' 'CUBS200'
+for querydata in 'Caltech256' 'CIFAR100' 'TinyImageNet200' 'CINIC10' 'ImageNet1k' 
 do
 CUDA_VISIBLE_DEVICES=1 python benign_user.py \
                       --batch_size=64 \
                       --encoder_arch_name=$encoder_arch_name \
                       --encoder_margin=3.2 \
-                      --encoder_suffix=$encoder_suffix \
                       --lk_ckpt=$lk_ckpt \
                       --input_thresh=0.12986328125 \
                       --lower=1e-3 \
                       --upper=3. \
                       --k=1 \
-                      --log_suffix=vae-stream-var_{$querydata} \
+                      --log_suffix=elbo_{$querydata} \
                       -l $querydata\
                       --device_id=1                     
 done                      

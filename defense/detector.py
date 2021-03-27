@@ -208,7 +208,7 @@ class ELBODetector(VAEDetector):
         logits = self.prior(z)
         logits = logits.permute(0, 2, 3, 1).reshape(-1, self.num_embeddings)
         log_prob = F.log_softmax(logits, dim=-1)
-        lpz = log_prob.max(dim=-1)
+        lpz, _ = log_prob.max(dim=-1)
         return llk+lpz
 
     def _process(self, images):

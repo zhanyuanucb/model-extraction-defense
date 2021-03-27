@@ -2,8 +2,9 @@ import argparse
 import json
 import os
 import sys
-sys.path.append('/mydata/model-extraction/model-extraction-defense/')
-sys.path.append('/mydata/model-extraction/model-extraction-defense/attack/adversary/query_blinding')
+sys.path.append('../')
+sys.path.append('../attack/adversary/query_blinding')
+sys.path.append('./likelihood_estimation/pytorch-generative')
 import os.path as osp
 import pickle
 from datetime import datetime
@@ -23,6 +24,8 @@ from attack.adversary.query_blinding.blinders import AutoencoderBlinders
 import attack.adversary.query_blinding.transforms as blinders_transforms
 from utils import ImageTensorSet, IdLayer
 
+import pytorch_generative as pg
+
 __author__ = "Zhanyuan Zhang"
 __author_email__ = "zhang_zhanyuan@berkeley.edu"
 __reference__ = "https://github.com/tribhuvanesh/knockoffnets/blob/master/knockoff/adversary/train.py"
@@ -41,6 +44,7 @@ def main():
     #                    default="/mydata/model-extraction/model-extraction-defense/defense/similarity_encoding/")
     parser.add_argument("--encoder_ckpt", metavar="PATH", type=str, default=None)
     parser.add_argument("--lk_ckpt", metavar="PATH", type=str, default="/mydata/model-extraction/model-extraction-defense/defense/likelihood_estimation/vq.ckpt")
+    parser.add_argument("--pixelcnn_ckpt", metavar="PATH", type=str, default="/mydata/model-extraction/model-extraction-defense/defense/likelihood_estimation/vq-vae_ckpt/2021-03-26_23:00:15-vq-vae-cifar10/pixelcnn.ckpt")
     parser.add_argument("--encoder_margin", metavar="TYPE", type=float, default=3.2)
     parser.add_argument("--encoder_suffix", metavar="TYPE", type=str, default="")
     parser.add_argument('--activation', metavar='TYPE', type=str, help='Activation name', default=None)
@@ -91,6 +95,7 @@ def main():
     blackbox_dir = params["blackbox_dir"]
     encoder_ckpt = params["encoder_ckpt"]
     lk_ckpt = params["lk_ckpt"]
+    pixelcnn_ckpt = params["pixelcnn_ckpt"]
     encoder_suffix = params["encoder_suffix"]
     candidate_sets = params["testset_names"]
     input_thresh = params["input_thresh"]
@@ -166,7 +171,24 @@ def main():
             #blackbox = Detector(k, thresh, encoder, MEAN, STD, num_clusters=num_classes, log_suffix=log_suffix, log_dir=log_dir)
             blackbox = Detector(k, thresh, encoder, MEAN, STD, num_clusters=50, log_suffix=log_suffix, log_dir=log_dir)
         elif lk_ckpt:
-            blackbox = VAEDetector(k, thresh, encoder, MEAN, STD, num_clusters=num_classes, log_suffix=log_suffix, log_dir=log_dir)
+            if pixelcnn_ckpt:
+                get_gated_pixelcnn = pg.models.gated_pixel_cnn
+                in_channels= 1
+                out_channels = num_embeddings
+                n_gated = 11 #num_layers_pixelcnn = 12
+                gated_channels = 32 #fmaps_pixelcnn = 32
+                head_channels = 32
+                prior = get_gated_pixelcnn.GatedPixelCNN(in_channels=in_channels, 
+                                                out_channels=out_channels,
+                                                n_gated=n_gated,
+                                                gated_channels=gated_channels, 
+                                                head_channels=head_channels)
+
+                prior.load_ckpt(pixelcnn_ckpt)
+                prior = prior.to(device)
+                blackbox = ELBODetector(k, thresh, encoder, prior, MEAN, STD, num_clusters=num_classes, log_suffix=log_suffix, log_dir=log_dir)
+            else:
+                blackbox = VAEDetector(k, thresh, encoder, MEAN, STD, num_clusters=num_classes, log_suffix=log_suffix, log_dir=log_dir)
         blackbox.init(blackbox_dir, device, time=created_on)
         total_input = 0
     
