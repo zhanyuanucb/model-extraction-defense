@@ -48,7 +48,7 @@ class Detector:
         print(f"=> Detector params:\n  k={k}\n  num_cluster={num_clusters}\n thresh={thresh}")
 
         # Debug
-        #self.log_dir = log_dir
+        self.log_dir = log_dir
         self.log_file = osp.join(log_dir, f"detector.{log_suffix}.log.tsv")
     
     def init(self, blackbox_dir, device, time=None, output_type="one_hot", T=1.):
@@ -150,15 +150,16 @@ class Detector:
 
 
 class VAEDetector(Detector):
-    def __init__(self, k, thresh, vae, mean, std, 
+    def __init__(self, k, thresh, vae, mean, std, cal_stream_var=False,
                  num_clusters=50, buffer_size=1000, memory_capacity=100000,
                  log_suffix="", log_dir="./"):
-        super(VAEDetector, self).__init__(k, thresh, None, mean, std, 
+        super(VAEDetector, self).__init__(k, thresh, None, mean, std, log_dir=log_dir, log_suffix=log_suffix,
                                           num_clusters=num_clusters, buffer_size=buffer_size, memory_capacity=memory_capacity)
         self.vae = vae
         self.num_samples = 0
         self.pixel_sum = 0.
         self.pixel_sqr_sum = 0.
+        self.cal_stream_var = cal_stream_var
 
     def _process(self, images):
         is_adv = [0 for _ in range(images.size(0))]
@@ -166,10 +167,8 @@ class VAEDetector(Detector):
         self.num_samples += B*C*H*W
         with torch.no_grad():
             # Calculate data variance from stream data
-            self.pixel_sum += torch.sum(images).item()
-            self.pixel_sqr_sum += torch.sum(images**2).item()
-            stream_var = self.get_stream_variance()
-            self.vae.set_data_variance(stream_var)
+            if self.cal_stream_var:
+                self.get_n_set_var_from_stream(images)
 
             self.call_count += images.size(0)
             #images = images * self.STD + self.MEAN
@@ -180,51 +179,150 @@ class VAEDetector(Detector):
     def get_stream_variance(self):
         return (self.pixel_sqr_sum - self.pixel_sum**2/self.num_samples)/self.num_samples
 
+    def get_n_set_var_from_stream(self, images):
+            self.pixel_sum += torch.sum(images).item()
+            self.pixel_sqr_sum += torch.sum(images**2).item()
+            stream_var = self.get_stream_variance()
+            new_var = 0.9*self.vae.data_variance + 0.1*stream_var
+            self.vae.set_data_variance(new_var)
+
 class ELBODetector(VAEDetector):
-    def __init__(self, k, thresh, vae, prior, mean, std, 
+    def __init__(self, k, thresh, vae, prior, mean, std,
                  in_channels=1, code_size=8, num_embeddings=512,
                  num_clusters=50, buffer_size=1000, memory_capacity=100000,
                  log_suffix="", log_dir="./"):
-        super(ELBODetector, self).__init__(k, thresh, vae, mean, std, 
+        super(ELBODetector, self).__init__(k, thresh, vae, mean, std, cal_stream_var=cal_stream_var, log_dir=log_dir, log_suffix=log_suffix,
                                           num_clusters=num_clusters, buffer_size=buffer_size, memory_capacity=memory_capacity)
         self.in_channels = in_channels
         self.code_size = code_size
         self.prior = prior
         self.num_embeddings = num_embeddings
+        self.elbo_cumavg = []
+        self.elbo_stream_sum = 0.
+        self.elbo_stream_avg_sum = 0.
+        self.elbo_stream_avg_sum_of_sq = 0.
+
+    def take_avg(self, x):
+        return np.cumsum(x)/np.array([i for i in range(1, len(x)+1)])
 
     def get_elbo(self, x):
         z = self.vae._encoder(x)
         z = self.vae._pre_vq_conv(z)
         _, quantized, _, z = self.vae._vq_vae(z)
 
-        z = z.view((-1, self.in_channels, self.code_size, self.code_size)) # (B*CS*CS, 1) -> (B, 1, CS, CS)
-        z = z.to(torch.float)
+        input_z = z.view((-1, self.in_channels, self.code_size, self.code_size)) # (B*CS*CS, 1) -> (B, 1, CS, CS)
+        input_z = input_z.to(torch.float)
         x_recon = self.vae._decoder(quantized)
 
         # Log likelihood log(p(x|z))
         llk = -F.mse_loss(x_recon, x) / self.vae.data_variance
 
         # Log prior log(p(z_q(x)))
-        logits = self.prior(z)
+        logits = self.prior(input_z)
         logits = logits.permute(0, 2, 3, 1).reshape(-1, self.num_embeddings)
         log_prob = F.log_softmax(logits, dim=-1)
-        lpz, _ = log_prob.max(dim=-1)
-        return llk+lpz
+        #lpz, _ = log_prob.max(dim=-1)
+        lpz = log_prob[range(log_prob.shape[0]), z]
+        #return llk+lpz
+        return llk, lpz, llk+lpz
+
+    def _init_log(self, time):
+        if not osp.exists(self.log_file):
+            with open(self.log_file, 'w') as log:
+                if time is not None:
+                    log.write(time + '\n')
+                columns = ["Query Count", "Memeory Consumed", "Detection Count", "Detected ELBO", "Lower", "Upper"]
+                log.write('\t'.join(columns) + '\n')
+        print(f"Created log file at {self.log_file}")
+
+    def _write_log(self, elbo, lower, upper):
+        with open(self.log_file, 'a') as log:
+            columns = [str(self.call_count), f"{self.memory_size}/{self.memory_capacity}", str(self.alarm_count), str(elbo), str(lower), str(upper)]
+            log.write('\t'.join(columns) + '\n')
 
     def _process(self, images):
         is_adv = [0 for _ in range(images.size(0))]
-        B, C, H, W = images.shape
-        self.num_samples += B*C*H*W
+            
         with torch.no_grad():
-            # Calculate data variance from stream data
-            self.pixel_sum += torch.sum(images).item()
-            self.pixel_sqr_sum += torch.sum(images**2).item()
-            stream_var = self.get_stream_variance()
-            self.vae.set_data_variance(stream_var)
-
             self.call_count += images.size(0)
             #images = images * self.STD + self.MEAN
-            elbo = self.get_elbo(images).cpu().numpy().mean()
-        self.query_dist.append(elbo)
+            #elbo = self.get_elbo(images).cpu().numpy().mean()
+
+            llk, lpz, elbo = self.get_elbo(images)
+            llk = llk.cpu().numpy().mean()
+            lpz = lpz.cpu().numpy().mean()
+            elbo = elbo.cpu().numpy().mean()
+
+        self.elbo_stream_sum += elbo
+        elbo_stream_avg_sum = self.elbo_stream_sum/self.call_count
+        self.elbo_cumavg.append(elbo_stream_avg_sum)
+        self.elbo_stream_avg_sum += elbo_stream_avg_sum
+        self.elbo_stream_avg_sum_of_sq += elbo_stream_avg_sum*elbo_stream_avg_sum
+        stream_var = (self.elbo_stream_avg_sum_of_sq - self.elbo_stream_avg_sum**2/self.call_count)/self.call_count
+        stream_std = stream_var**0.5
+
+        elbo_upper = elbo+3*stream_std
+        elbo_lower = elbo-3*stream_std
+
+        if elbo_upper < self.thresh or elbo_lower > self.thresh:
+            self.alarm_count += 1
+            self._write_log(elbo, elbo_lower, elbo_upper)
+            self.clear_memory()
+
+        if len(self.elbo_cumavg) >= self.memory_capacity:
+            self.clear_memory()
         return is_adv
 
+    def clear_memory(self):
+        self.elbo_stream_sum = 0.
+        self.elbo_stream_avg_sum = 0.
+        self.elbo_stream_avg_sum_of_sq = 0.
+        self.elbo_cumavg = []
+
+
+class ELBODetector2(Detector):
+    def __init__(self, k, thresh, vae, prior, mean, std,
+                 buffer_size=1000, memory_capacity=100000,
+                 log_suffix="", log_dir="./"):
+        super(ELBODetector2, self).__init__(k, thresh, None, mean, std, log_dir=log_dir, log_suffix=log_suffix,
+                                            buffer_size=buffer_size, memory_capacity=memory_capacity)
+        self.vqvae = vae
+        self.pixelcnn = prior
+
+    def get_elbo(self, images, labels):
+        with torch.no_grad():
+
+            x_tilde, _, _ = self.vqvae(images)
+            llk = -F.mse_loss(x_tilde, images)
+
+            latents = self.vqvae.encode(images)
+            logits = self.pixelcnn(latents, labels)
+            logits = logits.permute(0, 2, 3, 1).contiguous()
+            logits = logits.view(-1, 512)
+            log_prob = F.log_softmax(logits, dim=-1)
+            latents = latents.view(-1)
+            lpz = log_prob[range(log_prob.shape[0]), latents].mean()
+
+        return (llk.item(), lpz.item(), (llk+lpz).item())
+
+    def _process(self, images, labels):
+        is_adv = [0 for _ in range(images.size(0))]
+
+        self.call_count += images.size(0)
+
+        elbo = self.get_elbo(images, labels)
+        self.query_dist.append(elbo)
+
+        return is_adv
+
+    def __call__(self, images, labels, is_init=False, is_adv=False):
+        images = images.to(self.device)
+        if is_init:  
+            # Get label first
+            output = self.blackbox(images, is_adv=is_adv)
+            is_adv = self._process(images, output.argmax(1))
+        else:
+            # ---- Going through detection
+            is_adv = self._process(images, labels)
+            output = self.blackbox(images, is_adv=is_adv)
+        return output
