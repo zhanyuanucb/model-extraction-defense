@@ -187,7 +187,7 @@ class VAEDetector(Detector):
             self.vae.set_data_variance(new_var)
 
 class ELBODetector(VAEDetector):
-    def __init__(self, k, thresh, vae, prior, mean, std,
+    def __init__(self, k, thresh, vae, prior, mean, std, cal_stream_var=False,
                  in_channels=1, code_size=8, num_embeddings=512,
                  num_clusters=50, buffer_size=1000, memory_capacity=100000,
                  log_suffix="", log_dir="./"):
@@ -201,6 +201,7 @@ class ELBODetector(VAEDetector):
         self.elbo_stream_sum = 0.
         self.elbo_stream_avg_sum = 0.
         self.elbo_stream_avg_sum_of_sq = 0.
+        self.num_warmup_queries = 50
 
     def take_avg(self, x):
         return np.cumsum(x)/np.array([i for i in range(1, len(x)+1)])
@@ -241,12 +242,11 @@ class ELBODetector(VAEDetector):
             log.write('\t'.join(columns) + '\n')
 
     def _process(self, images):
-        is_adv = [0 for _ in range(images.size(0))]
+        is_adv = False
             
         with torch.no_grad():
             self.call_count += images.size(0)
-            #images = images * self.STD + self.MEAN
-            #elbo = self.get_elbo(images).cpu().numpy().mean()
+            self.memory_size += images.size(0)
 
             llk, lpz, elbo = self.get_elbo(images)
             llk = llk.cpu().numpy().mean()
@@ -254,30 +254,47 @@ class ELBODetector(VAEDetector):
             elbo = elbo.cpu().numpy().mean()
 
         self.elbo_stream_sum += elbo
-        elbo_stream_avg_sum = self.elbo_stream_sum/self.call_count
+        elbo_stream_avg_sum = self.elbo_stream_sum/self.memory_size
         self.elbo_cumavg.append(elbo_stream_avg_sum)
         self.elbo_stream_avg_sum += elbo_stream_avg_sum
         self.elbo_stream_avg_sum_of_sq += elbo_stream_avg_sum*elbo_stream_avg_sum
-        stream_var = (self.elbo_stream_avg_sum_of_sq - self.elbo_stream_avg_sum**2/self.call_count)/self.call_count
+        stream_var = (self.elbo_stream_avg_sum_of_sq - self.elbo_stream_avg_sum**2/self.memory_size)/self.memory_size
         stream_std = stream_var**0.5
 
-        elbo_upper = elbo+3*stream_std
-        elbo_lower = elbo-3*stream_std
+        elbo_upper = elbo_stream_avg_sum+2.*stream_std
+        elbo_lower = elbo_stream_avg_sum-2.*stream_std
 
-        if elbo_upper < self.thresh or elbo_lower > self.thresh:
+        if self.memory_size < self.num_warmup_queries:
+            return is_adv
+
+        if elbo_upper < self.thresh:
+            is_adv = True
             self.alarm_count += 1
-            self._write_log(elbo, elbo_lower, elbo_upper)
+            self._write_log(elbo, None, elbo_upper)
+            self.clear_memory()
+
+        if elbo_lower > self.thresh:
+            is_adv = True
+            self.alarm_count += 1
+            self._write_log(elbo, elbo_lower, None)
             self.clear_memory()
 
         if len(self.elbo_cumavg) >= self.memory_capacity:
             self.clear_memory()
+
         return is_adv
 
     def clear_memory(self):
         self.elbo_stream_sum = 0.
         self.elbo_stream_avg_sum = 0.
         self.elbo_stream_avg_sum_of_sq = 0.
+        #######################
+        # Debug
+        #######################
+        #torch.save(self.elbo_cumavg, osp.join(self.log_dir, f"elbo_cumavg_{self.call_count}.lst"))
+
         self.elbo_cumavg = []
+        self.memory_size = 0.
 
 
 class ELBODetector2(Detector):
