@@ -130,10 +130,10 @@ class JacobianAdversary:
                         outputs = blackbox(inputs, is_adv=True).cpu()
                 except TypeError as e:
                     outputs = blackbox(inputs).cpu()
-                if not self.useprobs:
-                    labels = torch.argmax(outputs, dim=1)
-                    labels_onehot = make_one_hot(labels, outputs.shape[1])
-                    outputs = labels_onehot
+                #if not self.useprobs:
+                #    labels = torch.argmax(outputs, dim=1)
+                #    labels_onehot = make_one_hot(labels, outputs.shape[1])
+                #    outputs = labels_onehot
                 Dy.append(outputs)
         Dy = torch.cat(Dy)
         #torch.save(blackbox.elbo_cumavg, osp.join(self.out_dir, 'elbo_cumavg.pt'))
@@ -149,7 +149,7 @@ class JacobianAdversary:
         _, _, model_adv = model_utils.train_model(model_adv, self.D, self.out_dir, num_workers=10,
                                             checkpoint_suffix='.{}'.format(self.blackbox.call_count),
                                             device=self.device, epochs=1, ema_decay=self.ema_decay,
-                                            log_interval=500, lr=0.01, momentum=0.9, batch_size=self.batch_size,
+                                            log_interval=500, lr=1e-2, momentum=0.9, batch_size=self.batch_size,
                                             lr_gamma=0.1, testset=self.testset,
                                             criterion_train=model_utils.soft_cross_entropy)
 
@@ -235,7 +235,7 @@ class JacobianAdversary:
                 #self.D = ImageTensorSet((Dx, Dy), transform=transform)
                 _, _, model_adv = model_utils.train_model(model_adv, self.D, self.out_dir, num_workers=10,
                                                     checkpoint_suffix='.{}'.format(self.blackbox.call_count), ema_decay=self.ema_decay,
-                                                    device=self.device, epochs=self.train_epochs, log_interval=500, lr=0.01,
+                                                    device=self.device, epochs=self.train_epochs, log_interval=500, lr=1e-2,
                                                     momentum=0.9, batch_size=self.batch_size, lr_gamma=0.1,
                                                     testset=self.testset, criterion_train=model_utils.soft_cross_entropy)
                 #Dx, Dy = self.D.data, self.D.targets
@@ -247,6 +247,7 @@ class JacobianAdversary:
                 # self.accuracies.append(acc)
 
                 # -------------------------- 3. Jacobian-based data augmentation
+                model_adv.eval()
                 if self.aug_strategy in ['jbda', 'jbself']:
                     self.D = self.jacobian_augmentation(model_adv, rho_current, step_size=self.eps, num_steps=self.num_steps)
                 elif self.aug_strategy == 'jbtop{}'.format(self.topk):
@@ -255,10 +256,10 @@ class JacobianAdversary:
                     #torch.save(self.blackbox.elbo_cumavg, osp.join(self.out_dir, "elbo_cumavg.pt"))
                     torch.save(self.blackbox.query_dist, osp.join(self.out_dir, "query_dist.pt"))
                 elif self.aug_strategy == 'fbtop{}'.format(self.topk):
-#                    self.D = self.jacobian_augmentation_topk(model_adv, rho_current, step_size=self.eps, num_steps=self.num_steps,
-#                                                             take_lastk=self.take_lastk, use_foolbox=True)
                     self.D = self.jacobian_augmentation_topk(model_adv, rho_current, step_size=self.eps, num_steps=self.num_steps,
-                                                             take_lastk=self.take_lastk, use_foolbox=True, use_feature_fool=True)
+                                                             take_lastk=self.take_lastk, use_foolbox=True)
+#                    self.D = self.jacobian_augmentation_topk(model_adv, rho_current, step_size=self.eps, num_steps=self.num_steps,
+#                                                             take_lastk=self.take_lastk, use_foolbox=True, use_feature_fool=True)
                 else:
                     raise ValueError('Unrecognized augmentation strategy: "{}"'.format(self.aug_strategy))
 
@@ -290,7 +291,7 @@ class JacobianAdversary:
                     _, _, model_adv = model_utils.train_model(model_adv, self.D, self.out_dir, num_workers=10,
                                                         checkpoint_suffix='.{}'.format(self.blackbox.call_count),
                                                         device=self.device, epochs=self.final_train_epochs, ema_decay=self.ema_decay,
-                                                        log_interval=500, lr=0.01, momentum=0.9, batch_size=self.batch_size,
+                                                        log_interval=500, lr=1e-2, momentum=0.9, batch_size=self.batch_size,
                                                         lr_gamma=0.1, testset=self.testset,
                                                         criterion_train=model_utils.soft_cross_entropy)
                     break
@@ -387,10 +388,10 @@ class JacobianAdversary:
             else:
                 raise ValueError('Unrecognized augmentation strategy {}'.format(self.aug_strategy))
 
-            if not self.useprobs:
-                labels = torch.argmax(Y_i, dim=1)
-                labels_onehot = make_one_hot(labels, Y_i.shape[1])
-                Y_i = labels_onehot
+            #if not self.useprobs:
+            #    labels = torch.argmax(Y_i, dim=1)
+            #    labels_onehot = make_one_hot(labels, Y_i.shape[1])
+            #    Y_i = labels_onehot
 
             # Rewrite D_sampled
             D_sampled.tensors[0][start_idx:end_idx] = (X + delta_i).detach().cpu()
@@ -402,7 +403,7 @@ class JacobianAdversary:
 
         return D_augmented
 
-    def jacobian_augmentation_topk(self, model_adv, rho_current, step_size=0.1, num_steps=8, 
+    def jacobian_augmentation_topk(self, model_adv, rho_current, step_size=0.1, num_steps=8, batch_size=128, 
                                          take_lastk=-1, use_foolbox=False, binary_search=False, use_feature_fool=False):
         if (self.kappa is not None) and (rho_current >= self.sigma):
             D_sampled = self.rand_sample(self.D, self.kappa)
@@ -414,7 +415,7 @@ class JacobianAdversary:
         if (len(D_sampled) * self.topk) + self.blackbox.call_count >= self.budget:
             # Reduce augmented data size to match query budget
             nqueries_remaining = self.budget - self.blackbox.call_count
-            nqueries_remaining /= 3.
+            nqueries_remaining /= self.topk #3.
             nqueries_remaining = int(np.ceil(nqueries_remaining))
             assert nqueries_remaining >= 0
 
@@ -437,21 +438,31 @@ class JacobianAdversary:
         print('=> Augmentation set size = {} (|D| = {}, B = {})'.format(len(D_sampled), len(self.D),
                                                                         self.blackbox.call_count))
 
-        loader = DataLoader(D_sampled, batch_size=1, shuffle=True)
+        loader = DataLoader(D_sampled, batch_size=batch_size, shuffle=True)
         X_aug = []
         Y_aug = []
-        adv2bb = 0
-        adv2adv = 0
-        adv2both = 0
-        adv2bb_t = 0
-        adv2adv_t = 0
-        adv2both_t = 0
-        num_skips = 0
+        adv2bb = 0.
+        adv2adv = 0.
+        adv2both = 0.
+        adv2bb_t = 0.
+        adv2adv_t = 0.
+        adv2both_t = 0.
+        num_skips = 0.
         asr = 0. # attack success rate
+        fb_is_adv = None
+        total = 0.
 
+        if use_foolbox or binary_search:
+            fmodel = foolbox.models.PyTorchModel(model_adv, bounds=(0, 1), preprocessing={"mean":self.MEAN.to(self.device), "std":self.STD.to(self.device)})
+        """
+        Note: Attacks by Foolbox supports batch attacks, BUT remaining budget 
+              may not be counted accurately.
+        """
         for i, (X, Y) in enumerate(loader):
-            assert X.shape[0] == Y.shape[0] == 1, 'Only supports batch_size = 1'
+            if not (use_foolbox or binary_search):
+                assert X.shape[0] == Y.shape[0] == 1, 'JB-top3 only supports batch_size = 1'
             X, Y = X.to(self.device), Y.to(self.device)
+            total += X.size(0)*self.topk
             # --------------------- Blackbox prediction before augmentaion 
             with torch.no_grad():
                 adv_before = model_adv(X).argmax(-1)
@@ -460,24 +471,35 @@ class JacobianAdversary:
                 except AttributeError as e:
                     bb_before = self.blackbox(X).argmax(-1)
 
-            Y_pred = model_adv(X)[0]
-            Y_pred_sorted = torch.argsort(Y_pred, descending=True)
-            Y_pred_sorted = Y_pred_sorted[Y_pred_sorted != Y[0].argmax()]  # Remove gt class
+            with torch.no_grad():
+                Y_pred = model_adv(X)
 
-            for c in Y_pred_sorted[:self.topk]:
+            if not (use_foolbox or binary_search):
+                Y_pred_sorted = torch.argsort(Y_pred[0], descending=True)
+                Y_pred_sorted = Y_pred_sorted[Y_pred_sorted != Y[0].argmax()]  # Remove gt class
+            else:
+                Y_pred_sorted = torch.argsort(Y_pred, descending=True)
+                new_Y_pred_sorted = []
+                for i, y in enumerate(Y_pred_sorted):
+                    new_Y_pred_sorted.append(y[y != Y[i].argmax()])
+                Y_pred_sorted = torch.stack(new_Y_pred_sorted)
+            for ci in range(self.topk):
+                if len(Y_pred_sorted.shape) == 1:
+                    c = Y_pred_sorted[ci]
+                elif len(Y_pred_sorted.shape) == 2: 
+                    c = Y_pred_sorted[:, ci]
+                else:
+                    raise RuntimeError
                 if use_foolbox:
                     if use_feature_fool:
-                        delta_i, fb_is_adv = self.feature_fool(model_adv, X, Y.argmax(dim=1), c, epsilon=step_size, alpha=0.01, device=self.device, num_iter=25)
-                        asr += 1 if fb_is_adv else 0
+                        delta_i, fb_is_adv = self.feature_fool(fmodel, X, Y.argmax(dim=1), c, epsilon=step_size, alpha=0.01, device=self.device, num_iter=25)
                     else:
-                        delta_i, fb_is_adv = self.foolbox_targ(model_adv, X, Y.argmax(dim=1), c, epsilon=step_size, alpha=0.01,
+                        delta_i, fb_is_adv = self.foolbox_targ(fmodel, X, Y.argmax(dim=1), c, epsilon=step_size, alpha=0.01,
                                                      device=self.device, attack_alg=self.foolbox_alg)
-                        asr += 1 if fb_is_adv else 0
 
                 elif binary_search:
-                    delta_i, fb_is_adv = self.binary_search_linf_targ(model_adv, self.blackbox, X, Y.argmax(dim=1), c,
+                    delta_i, fb_is_adv = self.binary_search_linf_targ(fmodel, self.blackbox, X, Y.argmax(dim=1), c,
                                                   epsilon=step_size, alpha=0.01, device=self.device)
-                    asr += 1 if fb_is_adv else 0
                 else:
                     delta_i = self.pgd_linf_targ(model_adv, X, Y.argmax(dim=1), c, epsilon=step_size, alpha=0.01,
                                              device=self.device)
@@ -486,15 +508,21 @@ class JacobianAdversary:
                     num_skips += 1
                     continue
 
+                asr += fb_is_adv.to(torch.float32).sum().item() if fb_is_adv is not None else 0
+
                 x_aug = X + delta_i
                 """
                 Adversarial Detector
                 """
                 if self.detector_adv is not None:
-                    is_adv = self.detector_adv(x_aug)[0]
-
-                    if is_adv:
-                        num_skips += 1
+                    size_before = x_aug.size(0)
+                    is_adv = self.detector_adv(x_aug)
+                    selected_idx = (torch.Tensor(is_adv) == False).to(self.device)
+                    x_aug = x_aug[selected_idx]
+                    size_after = x_aug.size(0)
+                    print(f"Filter out {size_before-size_after}/{size_before}")
+                    num_skips += size_before-size_after
+                    if size_after == 0:
                         continue
 
                 Y_adv = model_adv(x_aug)
@@ -512,25 +540,27 @@ class JacobianAdversary:
 
                 # Compare predictions
                 # Untargeted (simply changing labels)
-                adv2bb_i = bb_before.ne(Y_i.argmax(-1)).sum().item()
-                adv2bb += adv2bb_i
-                adv2adv_i = adv_before.ne(Y_adv.argmax(-1)).sum().item()
-                adv2adv += adv2adv_i
-                if adv2bb_i and adv2adv_i:
-                    adv2both += 1
+                adv2bb_i = bb_before.ne(Y_i.argmax(-1))#.sum().item()
+                adv2adv_i = adv_before.ne(Y_adv.argmax(-1))#.sum().item()
+                adv2both_i =  torch.logical_and(adv2bb_i ,adv2adv_i)
+
+                adv2bb += adv2bb_i.sum().item()
+                adv2adv += adv2adv_i.sum().item()
+                adv2both += adv2both_i.sum().item()
 
                 # Targeted
-                adv2bb_it = Y_i.argmax(-1).eq(c).sum().item()
-                adv2bb_t += adv2bb_it
-                adv2adv_it = Y_adv.argmax(-1).eq(c).sum().item()
-                adv2adv_t += adv2adv_it
-                if adv2bb_it and adv2adv_it:
-                    adv2both_t += 1
+                adv2bb_it = Y_i.argmax(-1).eq(c)#.sum().item()
+                adv2adv_it = Y_adv.argmax(-1).eq(c)#.sum().item()
+                adv2both_it =  torch.logical_and(adv2bb_it ,adv2adv_it)
 
-                if not self.useprobs:
-                    labels = torch.argmax(Y_i, dim=1)
-                    labels_onehot = make_one_hot(labels, Y_i.shape[1])
-                    Y_i = labels_onehot
+                adv2bb_t += adv2bb_it.sum().item()
+                adv2adv_t += adv2adv_it.sum().item()
+                adv2both_t += adv2both_it.sum().item()
+
+                #if not self.useprobs:
+                #    labels = torch.argmax(Y_i, dim=1)
+                #    labels_onehot = make_one_hot(labels, Y_i.shape[1])
+                #    Y_i = labels_onehot
 
                 #X_aug.append(X.detach().cpu().clone())
                 X_aug.append(x_aug.detach().cpu().clone())
@@ -539,7 +569,6 @@ class JacobianAdversary:
             if self.blackbox.call_count >= self.budget:
                 break
 
-        total = (i+1)*self.topk
         print(f"skip: {num_skips}/{total}")
         print(f"attack success rate: {asr/total*100}%")
         if len(X_aug) > 0:        
@@ -561,15 +590,15 @@ class JacobianAdversary:
         # Write number of adversarial examples to log
 
         print("Untargeted:")
-        msg = f"{adv2bb}/{(i+1)*self.topk} ({int(100*adv2bb/((i+1)*self.topk))})%"
+        msg = f"{adv2bb}/{total} ({int(100*adv2bb/total)})%"
         print(msg+" are adversarial to the victim")
         self._write_log(msg+" are adversarial to the victim")
 
-        msg2 = f"{adv2adv}/{(i+1)*self.topk} ({int(100*adv2adv/((i+1)*self.topk))})%"
+        msg2 = f"{adv2adv}/{total} ({int(100*adv2adv/total)})%"
         print(msg2+" are adversarial to the adversary")
         self._write_log(msg2+" are adversarial to the adversary")
 
-        msg3 = f"{adv2both}/{(i+1)*self.topk} ({int(100*adv2both/((i+1)*self.topk))})%"
+        msg3 = f"{adv2both}/{total} ({int(100*adv2both/total)})%"
         print(msg3+" are adversarial to both")
         self._write_log(msg3+" are adversarial to both")
 
@@ -617,6 +646,7 @@ class JacobianAdversary:
     @staticmethod
     def pgd_linf_targ(model, inputs, targets, y_targ, epsilon, alpha, device, num_iter=8):
         """ Construct targeted adversarial examples on the examples X"""
+        print("Wrong")
         if epsilon == 0:
             return torch.zeros_like(inputs)
 
@@ -634,28 +664,32 @@ class JacobianAdversary:
                 delta.grad.zero_()
             return delta.detach()
 
-    def foolbox_targ(self, model, inputs, targets, y_targ, epsilon, alpha, device, num_iter=8, attack_alg="pgd"):
-        print("Wrong")
+    def foolbox_targ(self, fmodel, inputs, targets, y_targ, epsilon, alpha, device, num_iter=8, attack_alg="pgd"):
         if attack_alg=="pgd":
             #attack = PGD(abs_stepsize=2*epsilon/num_iter)
+            adv_criterion = TargetedMisclassification(y_targ)
             attack = PGD()
         elif attack_alg=="cw_l2":
-            attack = L2CarliniWagnerAttack(steps=500)
+            adv_criterion = Misclassification(targets)
+            attack = L2CarliniWagnerAttack(steps=800, binary_search_steps=2)
         else:
             raise ValueError("Supported attack alg: ['pgd', 'cw_l2']")
         #print(f"Start attack by {attack}...")
         inputs = inputs.to(device)
 
+        tic = time.time()
         images = self.denormalize(inputs)
         #images = inputs.clone()
-        adv_criterion = TargetedMisclassification(y_targ[None])
-        fmodel = foolbox.models.PyTorchModel(model, bounds=(0, 1), preprocessing={"mean":self.MEAN.to(device), "std":self.STD.to(device)})
+        #fmodel = foolbox.models.PyTorchModel(model, bounds=(0, 1), preprocessing={"mean":self.MEAN.to(device), "std":self.STD.to(device)})
         #fmodel = foolbox.models.PyTorchModel(model, bounds=(-2.5, 2.8))
         _, images, is_adv = attack(fmodel, images, criterion=adv_criterion, epsilons=8./256)
         images = self.normalize(images)
+        tac = time.time()
+        print(f"For one sample: {(tac-tic)}s")
+        print(f"avg l2-dist: {foolbox.distances.l2(images, inputs).mean()}")
 
         delta = images - inputs
-        return delta, is_adv.item()
+        return delta, is_adv
 
     def binary_search_linf_targ(self, model_adv, model_vic, inputs, targets, y_targ, epsilon, alpha, device, num_iter=8, threshold=1e-6):
         print("Wrong")
@@ -702,7 +736,7 @@ class JacobianAdversary:
             #torch.save(self.feat2feat_b, "./feat2feat_b.pylist")
         else:
             return None, is_adv.item()
-        return delta, is_adv.item()
+        return delta, is_adv
 
     def boundary_search(self, model, x1, y1, x2, y2, thresh, max_attempts=1000):
         attempts = 0
@@ -732,7 +766,7 @@ class JacobianAdversary:
 
     def feature_fool(self, model, inputs, targets, y_targ, epsilon, alpha, device, num_iter=8):
         """ Construct targeted adversarial examples on the examples X"""
-        print("Wrong")
+        print('Wrong')
         attack = PGD(abs_stepsize=2*epsilon/num_iter)
         inputs = inputs.to(device)
 
@@ -746,7 +780,9 @@ class JacobianAdversary:
 
         if is_adv.item():
             num_iter = 100
-            alpha = 2*epsilon/num_iter
+            #alpha = 2*epsilon/num_iter
+            alpha = 1e-3
+            lam = 2.
             source_input, target_input = inputs, images
             with torch.enable_grad():
                 delta = torch.zeros_like(inputs, requires_grad=True).to(device)
@@ -763,14 +799,18 @@ class JacobianAdversary:
                 for _ in range(num_iter):
                     delta_feature= model.features(source_input+delta)
 
-                    loss = torch.norm(delta) + triplet_loss(delta_feature, target_feature, source_feature)
-                                                               # anchor         # positive      # negative
+                    triplet = triplet_loss(delta_feature, target_feature, source_feature)
+                                            # anchor         # positive      # negative
+                    delta_norm = torch.norm(delta)
+                    loss = delta_norm + lam*triplet
 
                     loss.backward(retain_graph=True)
                     #delta.data = (delta + alpha * delta.grad.detach().sign()).clamp(-epsilon, epsilon)
                     delta.data = (delta - alpha * delta.grad.detach().sign())
                     delta.data = (source_input+delta).clamp(-2.5, 2.8) - source_input
                     delta.grad.zero_()
-            return delta.detach(), is_adv.item()
+#                    print(loss.item(), delta.max().item(), delta_norm.item(), lam*triplet.item())
+#                print()
+            return delta.detach(), is_adv
         else:
-            return None, is_adv.item()
+            return None, is_adv
