@@ -1,10 +1,17 @@
 import random
 import numpy as np
+from numpy.lib.arraysetops import isin
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset
 from torchvision.datasets.folder import ImageFolder, VisionDataset, IMG_EXTENSIONS, default_loader
+from torchvision.transforms import transforms
+
 from PIL import Image
+#import foolbox
+#from foolbox.attacks import LinfPGD as PGD
+#from foolbox.attacks import L2CarliniWagnerAttack
+#from foolbox.criteria import Misclassification, TargetedMisclassification
 
 class ImageTensorSet(Dataset):
     """
@@ -76,8 +83,8 @@ class PositiveNegativeSet(VisionDataset):
         ran_img = self.random_transform(img)
 
         other_idx = random.choice(list(range(index)) + list(range(index+1, self.n_samples)))
-        #img2_pt = self.data[other_idx].clone()
-        img2_pt = self.data[other_idx].copy()
+        img2_pt = self.data[other_idx].clone()
+        #img2_pt = self.data[other_idx].copy()
         if not isinstance(img2_pt[0][0][0], np.uint8):
             img2_pt *= 255
         if not isinstance(img2_pt, np.ndarray):
@@ -86,6 +93,57 @@ class PositiveNegativeSet(VisionDataset):
         other_img = self.normal_transform(img2)
 
         return ori_img, ran_img, other_img, y
+
+    def __len__(self):
+        return self.n_samples
+
+class BinarySampleSet(PositiveNegativeSet):
+    """
+    For data in form of serialized tensor
+    """
+    def __init__(self, load_path, normal_transform=None, random_transform=None, dataset="CIFAR10"):
+        super(BinarySampleSet, self).__init__(load_path=load_path, normal_transform=normal_transform, random_transform=random_transform, dataset=dataset)
+        self.data, self.targets = torch.load(load_path)
+        self.n_samples = self.data.size(0)
+        self.normal_transform = normal_transform
+        self.random_transform = random_transform
+        self.mode = "L" if dataset == "MNIST" else "RGB"
+        #self.attack = attack
+        #self.fmodel = fmodel
+        #self.eps = eps
+        #self.adv_criterion = adv_criterion
+        #self.MEAN = torch.Tensor(mean).reshape([1, 3, 1, 1])
+        #self.STD = torch.Tensor(std).reshape([1, 3, 1, 1])
+        print("=> Initialize BinarySampleSet")
+
+    #def normalize(self, images):
+    #    mean, std = self.MEAN.to(images.device), self.STD.to(images.device)
+    #    return (images-mean) / std
+
+    def __getitem__(self, index):
+        img_pt, y = self.data[index], self.targets[index]
+
+        if not isinstance(img_pt[0][0][0], np.uint8):
+            img_pt *= 255
+        if not isinstance(img_pt, np.ndarray):
+            img_pt = img_pt.numpy()
+
+        img = Image.fromarray(img_pt.astype('uint8').transpose([1, 2, 0]), mode=self.mode)
+        ori_img = self.normal_transform(img)
+
+        other_idx = random.choice(list(range(index)) + list(range(index+1, self.n_samples)))
+        if isinstance(self.data, np.ndarray):
+            img2_pt = self.data[other_idx].copy()
+        else:
+            img2_pt = self.data[other_idx].clone()
+        if not isinstance(img2_pt[0][0][0], np.uint8):
+            img2_pt *= 255
+        if not isinstance(img2_pt, np.ndarray):
+            img2_pt = img2_pt.numpy()
+        img2 = Image.fromarray(img2_pt.astype('uint8').transpose([1, 2, 0]), mode=self.mode)
+        other_img = self.normal_transform(img2)
+
+        return ori_img, other_img, y
 
     def __len__(self):
         return self.n_samples

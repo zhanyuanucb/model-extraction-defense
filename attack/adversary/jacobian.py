@@ -16,26 +16,21 @@ import re
 
 import numpy as np
 
-from tqdm import tqdm
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader, TensorDataset, Subset
-import torchvision
+
+from attack import datasets
+import attack.utils.model as model_utils
+import attack.config as cfg
+import modelzoo.zoo as zoo
 
 import foolbox
 from foolbox.attacks import LinfPGD as PGD
 from foolbox.attacks import L2CarliniWagnerAttack
 from foolbox.criteria import Misclassification, TargetedMisclassification
-
-from attack import datasets
-import attack.utils.transforms as transform_utils
-import attack.utils.model as model_utils
-import attack.utils.utils as knockoff_utils
-import attack.config as cfg
-import modelzoo.zoo as zoo
 
 from defense.detector import *
 
@@ -57,7 +52,7 @@ class JacobianAdversary:
     """
     def __init__(self, blackbox, budget, model_adv_name, model_adv_pretrained, modelfamily, seedset, testset, device, out_dir, aug_batch_size=128,
                  num_classes=10, batch_size=cfg.DEFAULT_BATCH_SIZE, ema_decay=-1, detector=None, blinder_fn=None, binary_search=False, use_feature_fool=False, foolbox_alg="pgd",
-                 eps=0.1, num_steps=8, train_epochs=20, kappa=400, tau=None, rho=6, sigma=-1, take_lastk=-1,
+                 eps=0.1, fb_eps_factor=1., num_steps=8, train_epochs=20, kappa=400, tau=None, rho=6, sigma=-1, take_lastk=-1,
                  query_batch_size=1, random_adv=False, adv_transform=False, aug_strategy='jbda', useprobs=True, final_train_epochs=100):
         self.blackbox = blackbox
         self.budget = budget
@@ -77,6 +72,7 @@ class JacobianAdversary:
         self.train_epochs = train_epochs
         self.final_train_epochs = final_train_epochs
         self.eps = eps
+        self.fb_eps_factor = fb_eps_factor
         self.num_steps = num_steps
         self.kappa = kappa
         self.tau = tau
@@ -303,7 +299,6 @@ class JacobianAdversary:
                 print()
         else:
             torch.save(self.blackbox.blackbox.conf_vic, osp.join(self.out_dir, "conf_vic.pt"))
-            exit(0)
             print('=> # BB Queries ({}) >= budget ({}). Ending attack.'.format(self.blackbox.call_count,
                                                                                self.budget))
             model_adv = zoo.get_net(self.model_adv_name, self.modelfamily, self.model_adv_pretrained,
@@ -526,16 +521,28 @@ class JacobianAdversary:
                 """
                 Adversarial Detector
                 """
+                selected_idx = None
+                bb_before_i = bb_before.clone()
+                adv_before_i = adv_before.clone()
+                c_i = c.clone()
+
                 if self.detector_adv is not None:
                     size_before = x_aug.size(0)
                     is_adv = self.detector_adv(x_aug)
                     selected_idx = (torch.Tensor(is_adv) == False).to(self.device)
+                    #assert selected_idx.size(0) == size_before, f"need selected idx {size_before}, but got {selected_idx.size(0)}"
                     x_aug = x_aug[selected_idx]
                     size_after = x_aug.size(0)
                     print(f"Filter out {size_before-size_after}/{size_before}")
                     num_skips += size_before-size_after
                     if size_after == 0:
                         continue
+
+                if selected_idx is not None:
+                    bb_before_i = bb_before[selected_idx]
+                    adv_before_i = adv_before[selected_idx]
+                    c_i = c[selected_idx]
+
                 with torch.no_grad():
                     Y_adv = model_adv(x_aug)
                     conf_a, Y_adv_pred = F.softmax(Y_adv, dim=-1).max(-1)
@@ -561,8 +568,8 @@ class JacobianAdversary:
 
                 # Compare predictions
                 # Untargeted (simply changing labels)
-                adv2bb_i = bb_before.ne(Y_i_pred)#.sum().item()
-                adv2adv_i = adv_before.ne(Y_adv_pred)#.sum().item()
+                adv2bb_i = bb_before_i.ne(Y_i_pred)#.sum().item()
+                adv2adv_i = adv_before_i.ne(Y_adv_pred)#.sum().item()
                 adv2both_i =  torch.logical_and(adv2bb_i ,adv2adv_i)
 
                 adv2bb += adv2bb_i.sum().item()
@@ -570,8 +577,8 @@ class JacobianAdversary:
                 adv2both += adv2both_i.sum().item()
 
                 # Targeted
-                adv2bb_it = Y_i_pred.eq(c)#.sum().item()
-                adv2adv_it = Y_adv.argmax(-1).eq(c)#.sum().item()
+                adv2bb_it = Y_i_pred.eq(c_i)#.sum().item()
+                adv2adv_it = Y_adv.argmax(-1).eq(c_i)#.sum().item()
                 adv2both_it =  torch.logical_and(adv2bb_it ,adv2adv_it)
 
                 adv2bb_t += adv2bb_it.sum().item()
@@ -682,17 +689,18 @@ class JacobianAdversary:
                 loss.backward()
                 delta.data = (delta + alpha * delta.grad.detach().sign()).clamp(-epsilon, epsilon)
                 delta.grad.zero_()
+            print(f"avg l2-dist: {torch.norm(delta)}")
             return delta.detach()
 
     def foolbox_targ(self, fmodel, inputs, targets, y_targ, epsilon, alpha, device, num_iter=8, attack_alg="pgd"):
+        adv_criterion = TargetedMisclassification(y_targ)
         if attack_alg=="pgd":
             #attack = PGD(abs_stepsize=2*epsilon/num_iter)
-            adv_criterion = TargetedMisclassification(y_targ)
+            #adv_criterion = TargetedMisclassification(y_targ)
             attack = PGD()
-            eps = 8./256
+            eps = 8./256 * self.fb_eps_factor
         elif attack_alg=="cw_l2":
             #adv_criterion = Misclassification(targets)
-            adv_criterion = TargetedMisclassification(y_targ)
             attack = L2CarliniWagnerAttack(steps=150, binary_search_steps=5)
             eps = None
         else:
@@ -701,9 +709,6 @@ class JacobianAdversary:
         inputs = inputs.to(device)
 
         images = self.denormalize(inputs)
-        #images = inputs.clone()
-        #fmodel = foolbox.models.PyTorchModel(model, bounds=(0, 1), preprocessing={"mean":self.MEAN.to(device), "std":self.STD.to(device)})
-        #fmodel = foolbox.models.PyTorchModel(model, bounds=(-2.5, 2.8))
         _, images, is_adv = attack(fmodel, images, criterion=adv_criterion, epsilons=eps)
         images = self.normalize(images)
         print(f"avg l2-dist: {foolbox.distances.l2(images, inputs).mean()}")
@@ -718,8 +723,6 @@ class JacobianAdversary:
         images = self.denormalize(inputs)
         #images = inputs.clone()
         adv_criterion = TargetedMisclassification(y_targ)
-        #fmodel = foolbox.models.PyTorchModel(model_adv, bounds=(0, 1), preprocessing={"mean":self.MEAN.to(device), "std":self.STD.to(device)})
-        #fmodel = foolbox.models.PyTorchModel(model, bounds=(-2.5, 2.8))
         _, images, is_adv = attack(fmodel, images, criterion=adv_criterion, epsilons=8./256)
         images = self.normalize(images)
 
@@ -789,10 +792,7 @@ class JacobianAdversary:
         inputs = inputs.to(device)
 
         images = self.denormalize(inputs)
-        #images = inputs.clone()
         adv_criterion = TargetedMisclassification(y_targ)
-        #fmodel = foolbox.models.PyTorchModel(model, bounds=(0, 1), preprocessing={"mean":self.MEAN.to(device), "std":self.STD.to(device)})
-        #fmodel = foolbox.models.PyTorchModel(model, bounds=(-2.5, 2.8))
         _, images, is_adv = attack(fmodel, images, criterion=adv_criterion, epsilons=8./256)
         images = self.normalize(images)
 
