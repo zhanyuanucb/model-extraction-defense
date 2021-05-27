@@ -39,9 +39,18 @@ from attack.utils.model import get_optimizer
 import attack.utils.utils as attack_utils
 import modelzoo.zoo as zoo
 import attack.config as cfg
+from attack.victim.blackbox import Blackbox
 from defense.utils import PositiveNegativeSet, PositiveNegativeImageSet, IdLayer, BlinderPositiveNegativeSet
+from defense.utils import LogisticLayer
+from defense.utils import BinarySampleSet
 from attack.adversary.query_blinding.blinders import AutoencoderBlinders
 import attack.adversary.query_blinding.transforms as blinders_transforms
+
+import foolbox
+print(f"foolbox version: {foolbox.__version__}")
+from foolbox.attacks import LinfPGD as PGD
+from foolbox.attacks import L2CarliniWagnerAttack
+from foolbox.criteria import Misclassification, TargetedMisclassification
 
 __author__ = "Tribhuvanesh Orekondy"
 __author_email__ = "orekondy@mpi-inf.mpg.de"
@@ -65,9 +74,14 @@ def main():
     parser.add_argument('--sim_epochs', metavar='TYPE', type=int, help='Training epochs', default=50)
     parser.add_argument('--sim_norm', action='store_true')
     parser.add_argument('--train_on_seed', action='store_true')
+    parser.add_argument('--sim_encoder', action='store_true')
+    parser.add_argument('--foolbox_train', action='store_true')
+    parser.add_argument('--adaptive_misinfo', action='store_true')
+    parser.add_argument('--binary_ood', action='store_true')
     parser.add_argument('--seedsize', metavar='TYPE', type=int, help='size of seed images', default=5000)
     parser.add_argument('--activation', metavar='TYPE', type=str, help='Activation name', default=None)
     parser.add_argument('--adv_train', action='store_true')
+    parser.add_argument('--eps_factor', metavar='TYPE', type=float, help='PGD eps factor', default=1.)
     parser.add_argument('--callback', metavar='TYPE', type=float, help='Stop training once val acc meets requirement', default=None)
     parser.add_argument('--optimizer_name', metavar='TYPE', type=str, help='Optimizer name', default="adam")
     parser.add_argument('--ckpt_suffix', metavar='TYPE', type=str, default="")
@@ -164,21 +178,46 @@ def main():
     train_dir = cfg.dataset2dir[dataset_name]["train"]
     test_dir = cfg.dataset2dir[dataset_name]["test"]
 
-    try:    
-        # ----------------- Similarity training
-        sim_trainset = PositiveNegativeSet(train_dir, normal_transform=test_transform, random_transform=random_transform, dataset=dataset_name)
+#        ####################
+#        # Adversarial PNSet
+#        ####################
+#
+#        MEAN, STD = cfg.NORMAL_PARAMS['cifar']
+#        adv_criterion = Misclassification()
+#        attack = PGD()
+#        eps = 8./256
+#        fmodel = foolbox.models.PyTorchModel(victim, bounds=(0, 1), preprocessing={"mean":MEAN.to(device), "std":STD.to(device)})
+#
+#        sim_trainset = AdvPositiveNegativeSet(attack, fmodel, eps, adv_criterion,
+#                                              train_dir, MEAN, STD, normal_transform=test_transform, random_transform=random_transform, dataset=dataset_name)
+#        sim_valset = AdvPositiveNegativeSet(attack, fmodel, eps, adv_criterion,
+#                                              test_dir, MEAN, STD, normal_transform=test_transform, random_transform=random_transform, dataset=dataset_name)
 
-        sim_valset = PositiveNegativeSet(test_dir, normal_transform=test_transform, random_transform=random_transform, dataset=dataset_name)
-    except IsADirectoryError as e:
-        # ----------------- Similarity training
-        sim_trainset = PositiveNegativeImageSet(train_dir, normal_transform=test_transform, random_transform=random_transform)
+    if params["foolbox_train"]:
+        sim_trainset = BinarySampleSet(train_dir, normal_transform=test_transform, random_transform=random_transform, dataset=dataset_name)
 
-        sim_valset = PositiveNegativeImageSet(test_dir, normal_transform=test_transform, random_transform=random_transform)
+        sim_valset = BinarySampleSet(test_dir, normal_transform=test_transform, random_transform=random_transform, dataset=dataset_name)
+        #sim_valset = None
+        blackbox_dir = "/mydata/model-extraction/model-extraction-defense/attack/victim/models/cifar10/wrn28_2"
+        victim = Blackbox.from_modeldir(blackbox_dir, device, output_type="logits")
+        victim = victim.model
+    else:
+        try:    
+            # ----------------- Similarity training
+            sim_trainset = PositiveNegativeSet(train_dir, normal_transform=test_transform, random_transform=random_transform, dataset=dataset_name)
+
+            sim_valset = PositiveNegativeSet(test_dir, normal_transform=test_transform, random_transform=random_transform, dataset=dataset_name)
+        except IsADirectoryError as e:
+            # ----------------- Similarity training
+            sim_trainset = PositiveNegativeImageSet(train_dir, normal_transform=test_transform, random_transform=random_transform)
+
+            sim_valset = PositiveNegativeImageSet(test_dir, normal_transform=test_transform, random_transform=random_transform)
 
     ################################
     # Adversary only use seed images
     ################################
     if params["train_on_seed"]:
+        print("=> Train on seedset")
         sim_trainset.data, sim_trainset.targets = np.transpose(trainset.dataset.data[trainset.indices], (0, 3, 1, 2)), [trainset.dataset.targets[idx] for idx in trainset.indices]
         sim_trainset.n_samples = sim_trainset.data.shape[0]
 
@@ -215,23 +254,36 @@ def main():
     # Replace the last layer
 
     #model.fc = IdLayer(activation=nn.Sigmoid()).to(device)
-    activation_name = params['activation']
-    if activation_name == "sigmoid":
-        activation = nn.Sigmoid()
-        print(f"Encoder activation: {activation_name}")
+    if params["sim_encoder"]:
+        objective_mode = "sim_encoder"
+        activation_name = params['activation']
+        if activation_name == "sigmoid":
+            activation = nn.Sigmoid()
+            print(f"Encoder activation: {activation_name}")
+        else:
+            print("Normal activation")
+            activation = None
+        model.fc = IdLayer(activation=activation).to(device)
+    elif params["binary_ood"]:
+        objective_mode = "binary_ood"
+        feature_dim = params["feature_dim"]
+        model.fc = LogisticLayer(feature_dim)
+    elif params["adaptive_misinfo"]:
+        objective_mode = "adaptive_misinfo"
     else:
-        print("Normal activation")
-        activation = None
-    model.fc = IdLayer(activation=activation).to(device)
+        raise ValueError("Need to choose exactly one objective mode")
+
     model = model.to(device)
 
     # Setup optimizer
-    sim_optimizer = get_optimizer(model.parameters(), optimizer_type="sgdm", lr=1e-4, momentum=0.9)
+    #sim_optimizer = get_optimizer(model.parameters(), optimizer_type="sgdm", lr=1e-4, momentum=0.9)
+    sim_optimizer = get_optimizer(model.parameters(), optimizer_type="adam", lr=1e-3)
 
     margin_train = params['margin']
     margin_test = margin_train
     sim_epochs = params['sim_epochs']
     adv_train = params['adv_train']
+    eps_factor = params['eps_factor']
     checkpoint_suffix = ".sim-{:.1f}".format(margin_test)
     resume = params["resume"]
 
@@ -242,9 +294,18 @@ def main():
     sim_out_path = osp.join(sim_out_path, "{}-margin-{:.1f}".format(dataset_name, margin_test))
     attack_utils.create_dir(sim_out_path)
 
-    encoder_utils.train_model(model, sim_trainset, sim_out_path, epochs=sim_epochs, testset=sim_valset,
-                            criterion_train=margin_train, criterion_test=margin_test,
-                            checkpoint_suffix=checkpoint_suffix, device=device, optimizer=sim_optimizer, adv_train=adv_train, resume=resume)
+    if params["foolbox_train"]:
+        MEAN, STD = cfg.NORMAL_PARAMS['cifar']
+        encoder_utils.foolbox_train_model(model, victim, sim_trainset, sim_out_path, MEAN, STD, objective_mode,
+                                epochs=sim_epochs, testset=sim_valset,
+                                criterion_train=margin_train, criterion_test=margin_test,
+                                checkpoint_suffix=checkpoint_suffix, device=device, optimizer=sim_optimizer, eps_factor=eps_factor, resume=resume)
+
+    else:
+        assert objective_mode=="sim_encoder", f"regular encoder training only support sim_encoder, but got {objective_mode}"
+        encoder_utils.train_model(model, sim_trainset, sim_out_path, epochs=sim_epochs, testset=sim_valset,
+                                criterion_train=margin_train, criterion_test=margin_test,
+                                checkpoint_suffix=checkpoint_suffix, device=device, optimizer=sim_optimizer, adv_train=adv_train, resume=resume)
 
     params['created_on'] = str(datetime.now())
     params_out_path = osp.join(sim_out_path, f'params_train{checkpoint_suffix}.json')
